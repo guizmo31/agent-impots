@@ -94,6 +94,89 @@ class FiscalEngine:
             ],
         }
 
+    def compute_from_profile(self, profile: dict) -> dict:
+        """Calcul fiscal à partir du profil JSON structuré (fallback si le LLM échoue)."""
+        foyer = profile.get("foyer", {})
+        revenus = profile.get("revenus", {})
+
+        # Parts
+        parts = foyer.get("nb_parts", 1.0)
+        if parts == 0:
+            parts = self._determine_parts_from_profile(foyer)
+
+        situation = foyer.get("situation", "célibataire")
+        is_couple = situation in ("marié", "pacsé")
+
+        # Salaires
+        total_salaires = sum(s.get("net_imposable", 0) for s in revenus.get("salaires", []))
+        total_pas = sum(s.get("pas_retenu", 0) for s in revenus.get("salaires", []))
+
+        # Revenus fonciers micro
+        total_foncier = sum(f.get("loyers_bruts", 0) * 0.7 for f in revenus.get("foncier_nu", [])
+                           if f.get("regime") == "micro")
+        total_foncier += sum(f.get("result_net", f.get("loyers_bruts", 0) - f.get("charges_deductibles", 0))
+                            for f in revenus.get("foncier_nu", []) if f.get("regime") == "reel")
+
+        revenu_brut = total_salaires + max(0, total_foncier)
+
+        abattement = max(ABATTEMENT_10_PERCENT_MIN, min(total_salaires * 0.10, ABATTEMENT_10_PERCENT_MAX))
+        revenu_net_imposable = max(0, revenu_brut - abattement)
+
+        impot_brut = self._calcul_bareme(revenu_net_imposable, parts)
+        decote = self._calcul_decote(impot_brut, is_couple)
+        impot_net = max(0, impot_brut - decote)
+
+        cases = []
+        for i, s in enumerate(revenus.get("salaires", [])):
+            case = "1AJ" if i == 0 else "1BJ"
+            cases.append({
+                "case": case,
+                "libelle": f"Salaires - {s.get('source', f'Déclarant {i+1}')}",
+                "montant": round(s.get("net_imposable", 0), 2),
+                "justification": f"Net imposable depuis {s.get('doc_source', 'profil')}",
+                "source": "profil.revenus.salaires",
+            })
+
+        return {
+            "situation": {"situation_familiale": situation, "parts": parts},
+            "cases": cases,
+            "calcul_impot": {
+                "revenu_brut_global": round(revenu_brut, 2),
+                "abattement_10_pct": round(abattement, 2),
+                "revenu_net_imposable": round(revenu_net_imposable, 2),
+                "nombre_parts": parts,
+                "quotient_familial": round(revenu_net_imposable / parts, 2) if parts else 0,
+                "impot_brut": round(impot_brut, 2),
+                "decote": round(decote, 2),
+                "reductions": [],
+                "credits": [],
+                "impot_net": round(impot_net, 2),
+                "prelev_source_deja_paye": round(total_pas, 2),
+                "solde": round(impot_net - total_pas, 2),
+                "detail_bareme": self._detail_bareme(revenu_net_imposable, parts),
+            },
+            "remarques": [
+                "Calcul effectué par le moteur local (fallback). Vérifiez les montants.",
+            ],
+        }
+
+    def _determine_parts_from_profile(self, foyer: dict) -> float:
+        """Détermine les parts depuis le profil structuré."""
+        situation = foyer.get("situation", "célibataire")
+        parts = 2.0 if situation in ("marié", "pacsé") else 1.0
+
+        nb_enfants = foyer.get("nb_enfants_mineurs", 0) + foyer.get("nb_enfants_majeurs_rattaches", 0)
+        if nb_enfants >= 1: parts += 0.5
+        if nb_enfants >= 2: parts += 0.5
+        if nb_enfants >= 3: parts += (nb_enfants - 2) * 1.0
+
+        parts += foyer.get("nb_enfants_handicapes", 0) * 0.5
+        if foyer.get("parent_isole"): parts += 0.5
+        if foyer.get("invalidite_declarant1"): parts += 0.5
+        if foyer.get("invalidite_declarant2"): parts += 0.5
+
+        return parts
+
     def _calcul_bareme(self, revenu_net: float, parts: float) -> float:
         """Calcule l'impôt brut selon le barème progressif avec quotient familial."""
         quotient = revenu_net / parts if parts else revenu_net
