@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent Impôts - Assistant Fiscal Local</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <div class="app">
+        <header class="header">
+            <div class="header-content">
+                <div class="logo">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                        <line x1="16" y1="13" x2="8" y2="13"/>
+                        <line x1="16" y1="17" x2="8" y2="17"/>
+                        <polyline points="10 9 9 9 8 9"/>
+                    </svg>
+                </div>
+                <div>
+                    <h1>Agent Impôts</h1>
+                    <p class="subtitle">Assistant fiscal 100% local — vos données restent sur votre PC</p>
+                </div>
+                <div class="status-badge" id="status-badge">
+                    <span class="status-dot"></span>
+                    <span id="status-text">Connexion...</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Session picker (shown before chat) -->
+        <div class="session-picker" id="session-picker">
+            <div class="session-picker-content">
+                <h2>Vos déclarations</h2>
+                <p>Reprenez une session existante ou commencez-en une nouvelle.</p>
+
+                <div class="session-list" id="session-list">
+                    <!-- Filled by JS -->
+                </div>
+
+                <div class="session-new">
+                    <input type="text" id="new-session-name" placeholder="Nom de la déclaration (ex: Impôts 2025)" />
+                    <button id="new-session-btn" class="btn-primary">Nouvelle déclaration</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chat (hidden until session is selected) -->
+        <main class="chat-container" id="chat-container" style="display:none;">
+            <div class="chat-messages" id="chat-messages">
+            </div>
+        </main>
+
+        <footer class="input-area" id="input-area" style="display:none;">
+            <div class="input-container">
+                <textarea
+                    id="user-input"
+                    placeholder="Tapez votre message ici..."
+                    rows="1"
+                    disabled
+                ></textarea>
+                <button id="send-btn" disabled>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="22" y1="2" x2="11" y2="13"/>
+                        <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                    </svg>
+                </button>
+            </div>
+            <p class="disclaimer">Outil d'aide — ne remplace pas un conseiller fiscal professionnel</p>
+        </footer>
+    </div>
+
+    <script src="/js/app.js"></script>
+</body>
+</html>

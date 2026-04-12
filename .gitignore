@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+venv/
+.venv/
+env/
+
+# Output généré par l'agent
+output/*.html
+output/*.json
+
+# Cache embeddings RAG
+data/.cache/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Documents personnels (ne jamais committer ses documents fiscaux !)
+documents/*
+!documents/.gitkeep
+
+# Sessions utilisateur (données personnelles)
+sessions/*
+!sessions/.gitkeep

@@ -1,0 +1,930 @@
+{
+  "meta": {
+    "formulaire": "2042",
+    "annee_declaration": 2026,
+    "annee_revenus": 2025,
+    "source": "Formulaire 2042 - Déclaration des revenus 2025",
+    "note": "Base de connaissances pour le RAG de l'Agent Impôts. À compléter/mettre à jour avec le formulaire officiel publié par la DGFiP."
+  },
+  "bareme_ir": {
+    "description": "Barème progressif de l'impôt sur le revenu 2026 (revenus 2025). À mettre à jour quand le barème officiel est publié.",
+    "tranches": [
+      {"min": 0, "max": 11497, "taux": 0.00, "commentaire": "Tranche à 0% - exonérée"},
+      {"min": 11497, "max": 29315, "taux": 0.11, "commentaire": "Tranche à 11%"},
+      {"min": 29315, "max": 83823, "taux": 0.30, "commentaire": "Tranche à 30%"},
+      {"min": 83823, "max": 180294, "taux": 0.41, "commentaire": "Tranche à 41%"},
+      {"min": 180294, "max": null, "taux": 0.45, "commentaire": "Tranche à 45% - tranche marginale"}
+    ],
+    "abattement_10pct": {
+      "minimum": 495,
+      "maximum": 14171,
+      "description": "Abattement forfaitaire de 10% pour frais professionnels sur les traitements et salaires"
+    },
+    "decote": {
+      "seuil_celibataire": 1929,
+      "seuil_couple": 3191,
+      "coefficient": 0.4525,
+      "description": "Décote applicable si l'impôt brut est inférieur au seuil. Décote = seuil - (impôt_brut × 0.4525)"
+    },
+    "plafond_quotient_familial": {
+      "demi_part": 1759,
+      "description": "Plafond de l'avantage en impôt pour chaque demi-part supplémentaire"
+    }
+  },
+  "cases": {
+    "page1_etat_civil": {
+      "0DA": {"libelle": "Date de mariage ou PACS", "type": "date"},
+      "0DB": {"libelle": "Date de divorce ou séparation", "type": "date"},
+      "0CF": {
+        "libelle": "Nombre d'enfants à charge",
+        "type": "nombre",
+        "description": "Enfants mineurs au 1er janvier de l'année d'imposition (ou nés durant l'année), ou enfants infirmes quel que soit l'âge. Inclut les enfants recueillis (orphelins, enfants du conjoint) si pris en charge effective et exclusive."
+      },
+      "0CG": {
+        "libelle": "Nombre d'enfants en résidence alternée",
+        "type": "nombre",
+        "description": "Enfants mineurs en résidence alternée (garde partagée). Chaque parent compte la moitié des parts correspondantes. En cas de désaccord, le juge fixe la résidence."
+      },
+      "0CH": {
+        "libelle": "Nombre d'enfants à charge titulaires de la carte d'invalidité",
+        "type": "nombre",
+        "description": "Enfants à charge titulaires de la carte mobilité inclusion (CMI) mention invalidité (taux ≥ 80%). Donne droit à une demi-part supplémentaire par enfant en plus de la demi-part ou part enfant."
+      },
+      "0CI": {
+        "libelle": "Nombre d'enfants en résidence alternée titulaires de la carte d'invalidité",
+        "type": "nombre",
+        "description": "Enfants en résidence alternée titulaires de la CMI invalidité. Demi-part supplémentaire divisée par 2 (quart de part)."
+      },
+      "0DJ": {
+        "libelle": "Nombre de personnes à charge (autres que enfants)",
+        "type": "nombre",
+        "description": "Personnes invalides vivant sous le toit du contribuable (autre que conjoint ou enfant). Donne droit à une demi-part supplémentaire par personne recueillie. Condition : vivre sous le même toit et être titulaire de la CMI invalidité ou d'une pension d'invalidité ≥ 40%."
+      },
+      "0DN": {
+        "libelle": "Nombre de personnes à charge titulaires de la carte d'invalidité",
+        "type": "nombre",
+        "description": "Parmi les personnes déclarées en 0DJ, celles titulaires de la CMI invalidité."
+      }
+    },
+    "situation_familiale_detaillee": {
+      "0AM": {
+        "libelle": "Marié(e)",
+        "type": "case_a_cocher",
+        "description": "Marié au 31 décembre de l'année d'imposition. Déclaration commune obligatoire (sauf année du mariage : choix possible)."
+      },
+      "0AO": {
+        "libelle": "Pacsé(e)",
+        "type": "case_a_cocher",
+        "description": "Pacsé au 31 décembre de l'année d'imposition. Même régime que le mariage pour l'imposition."
+      },
+      "0AD": {
+        "libelle": "Divorcé(e) / Séparé(e)",
+        "type": "case_a_cocher"
+      },
+      "0AC": {
+        "libelle": "Célibataire",
+        "type": "case_a_cocher"
+      },
+      "0AV": {
+        "libelle": "Veuf(ve)",
+        "type": "case_a_cocher",
+        "description": "Veuf/veuve au 31 décembre. Si enfants à charge : conserve les 2 parts du couple l'année du décès et l'année suivante. Ensuite : 1 part + parts enfants + 1 part supplémentaire (si au moins 1 enfant à charge)."
+      },
+      "T": {
+        "libelle": "Parent isolé",
+        "type": "case_a_cocher",
+        "description": "Vous vivez seul(e) au 1er janvier de l'année avec au moins un enfant à charge (ou un enfant majeur rattaché). Donne droit à une demi-part supplémentaire (1,5 part au lieu de 1 pour le 1er enfant). Condition : vivre seul(e), sans concubin, ni partenaire PACS, ni personne vivant maritalement.",
+        "article_cgi": "Article 194 II du CGI"
+      },
+      "L": {
+        "libelle": "Vous vivez seul(e) et avez élevé un enfant pendant au moins 5 ans",
+        "type": "case_a_cocher",
+        "description": "Si vous vivez seul(e) (célibataire, divorcé(e), veuf(ve)) et que vous avez élevé seul(e) un enfant pendant au moins 5 ans, vous bénéficiez d'une demi-part supplémentaire même si l'enfant n'est plus à charge. Plafond de l'avantage fiscal : 1 050€.",
+        "plafond_avantage": 1050,
+        "article_cgi": "Article 195 1-f du CGI"
+      }
+    },
+    "enfants_majeurs_rattaches": {
+      "0EF": {
+        "libelle": "Nombre d'enfants majeurs célibataires rattachés",
+        "type": "nombre",
+        "description": "Un enfant majeur (18-25 ans au 1er janvier, poursuivant ses études) peut demander son rattachement au foyer fiscal de ses parents. L'enfant n'a alors plus de déclaration propre. Les parents bénéficient d'une demi-part (ou part à partir du 3ème) OU d'un abattement sur le revenu. Le rattachement est irrévocable pour l'année entière.",
+        "age_max": 25,
+        "condition": "Poursuite d'études au 1er janvier ou au 1er octobre de l'année d'imposition",
+        "article_cgi": "Article 6-3 du CGI"
+      },
+      "0EG": {
+        "libelle": "Nombre d'enfants majeurs mariés/pacsés rattachés (couple)",
+        "type": "nombre",
+        "description": "Un couple marié/pacsé dont l'un des conjoints a moins de 21 ans (ou 25 ans si étudiant) peut être rattaché au foyer d'un des parents. Pas de demi-part supplémentaire mais un abattement de 6 674€ par personne rattachée sur le revenu imposable."
+      },
+      "abattement_rattachement": {
+        "description": "Si l'enfant majeur marié/pacsé ou chargé de famille est rattaché, le parent bénéficie d'un abattement (et non d'une demi-part). Abattement 2025 : 6 674€ par personne rattachée (enfant + conjoint + petits-enfants éventuels).",
+        "montant": 6674,
+        "type": "info"
+      }
+    },
+    "invalidite_handicap": {
+      "P": {
+        "libelle": "Déclarant 1 titulaire d'une carte d'invalidité ou CMI-invalidité",
+        "type": "case_a_cocher",
+        "description": "Titulaire de la carte mobilité inclusion mention invalidité (taux d'incapacité ≥ 80%) ou de l'ancienne carte d'invalidité. Donne droit à une demi-part supplémentaire.",
+        "article_cgi": "Article 195 1-b du CGI"
+      },
+      "F": {
+        "libelle": "Déclarant 2 titulaire d'une carte d'invalidité ou CMI-invalidité",
+        "type": "case_a_cocher"
+      },
+      "G": {
+        "libelle": "Déclarant 1 titulaire d'une pension d'invalidité ≥ 40%",
+        "type": "case_a_cocher",
+        "description": "Titulaire d'une pension militaire d'invalidité d'au moins 40% ou d'une pension d'invalidité pour accident du travail d'au moins 40%. Donne droit à une demi-part supplémentaire."
+      },
+      "I": {
+        "libelle": "Déclarant 2 titulaire d'une pension d'invalidité ≥ 40%",
+        "type": "case_a_cocher"
+      },
+      "W": {
+        "libelle": "Déclarant 1 ancien combattant de plus de 75 ans",
+        "type": "case_a_cocher",
+        "description": "Ancien combattant ou veuf(ve) d'ancien combattant, âgé de plus de 75 ans au 31 décembre. Donne droit à une demi-part supplémentaire.",
+        "article_cgi": "Article 195 1-d et e du CGI"
+      },
+      "S": {
+        "libelle": "Déclarant 2 ancien combattant de plus de 75 ans",
+        "type": "case_a_cocher"
+      }
+    },
+    "aidants_dependance": {
+      "7CD": {
+        "libelle": "Dépenses d'accueil en EHPAD / établissement de long séjour - Déclarant 1",
+        "type": "montant",
+        "description": "Réduction d'impôt de 25% des dépenses d'hébergement et de dépendance (hors soins) en EHPAD, établissement de long séjour ou section de cure médicale. Plafond : 10 000€ par personne hébergée (soit réduction max 2 500€). Si couple : 10 000€ chacun.",
+        "taux_reduction": 0.25,
+        "plafond_par_personne": 10000,
+        "article_cgi": "Article 199 quindecies du CGI"
+      },
+      "7CE": {
+        "libelle": "Dépenses d'accueil en EHPAD - Déclarant 2",
+        "type": "montant"
+      },
+      "7DL": {
+        "libelle": "Frais d'accueil d'une personne âgée de plus de 75 ans",
+        "type": "montant",
+        "description": "Vous hébergez sous votre toit une personne de plus de 75 ans (ascendant ou non) dont le revenu imposable est inférieur au plafond de l'ASPA (12 144,27€ en 2024). Déduction du revenu global : avantages en nature (nourriture, logement) dans la limite de 3 968€ par personne accueillie.",
+        "plafond_par_personne": 3968,
+        "condition_revenus_accueilli": 12144,
+        "article_cgi": "Article 156 II-2° ter du CGI"
+      },
+      "7DB_AIDANT": {
+        "case": "7DB",
+        "libelle": "Emploi à domicile pour personne dépendante (aide ménagère, auxiliaire de vie)",
+        "type": "montant",
+        "description": "Crédit d'impôt de 50% si le contribuable emploie une aide à domicile pour lui-même (si ≥ 70 ans ou dépendant GIR 1-4) ou pour un ascendant. Plafond majoré à 20 000€ si le bénéficiaire est titulaire de la CMI-invalidité. L'APA reçue doit être déduite des dépenses déclarées.",
+        "plafond_invalidite": 20000,
+        "article_cgi": "Article 199 sexdecies du CGI"
+      },
+      "7DF": {
+        "libelle": "Sommes versées pour l'emploi d'un salarié à domicile (si première année)",
+        "type": "montant",
+        "description": "Première année d'emploi d'un salarié à domicile : plafond majoré à 15 000€ (au lieu de 12 000€)."
+      },
+      "7DD": {
+        "libelle": "Vous ou votre conjoint êtes titulaire de la CMI-invalidité / bénéficiaire de l'APA",
+        "type": "case_a_cocher",
+        "description": "Permet d'accéder au plafond majoré de 20 000€ pour l'emploi à domicile."
+      },
+      "7DQ": {
+        "libelle": "Frais d'emploi à domicile — personne recevant l'APA",
+        "type": "case_a_cocher",
+        "description": "L'Allocation Personnalisée d'Autonomie (APA) perçue doit être déduite du montant déclaré en case 7DB."
+      }
+    },
+    "pensions_alimentaires_detaillees": {
+      "6GU": {
+        "libelle": "Pensions alimentaires versées à des enfants majeurs",
+        "type": "montant",
+        "description": "Pension versée à un enfant majeur non rattaché au foyer (nourriture, logement, habillement, santé, etc.). Plafond : 6 674€ par enfant. Si l'enfant est marié/pacsé et que vous êtes les seuls parents aidants : 13 348€. L'enfant doit déclarer la pension reçue.",
+        "plafond_par_enfant": 6674,
+        "plafond_enfant_couple": 13348,
+        "article_cgi": "Article 156 II-2° du CGI"
+      },
+      "6GP": {
+        "libelle": "Pensions alimentaires versées à des enfants mineurs (décision de justice)",
+        "type": "montant",
+        "description": "Pension alimentaire versée pour un enfant mineur suite à divorce/séparation, fixée par jugement ou convention. Intégralement déductible. Si enfant en résidence alternée : pas de déduction de pension (les parts sont partagées)."
+      },
+      "6GI": {
+        "libelle": "Pensions alimentaires versées à des ascendants",
+        "type": "montant",
+        "description": "Déductible sans plafond si l'ascendant (parent, grand-parent) est dans le besoin (revenus insuffisants). Obligation alimentaire prévue par les articles 205 à 207 du Code Civil. Peut prendre la forme : pension cash, paiement de l'EHPAD, hébergement (valorisation forfaitaire 3 968€), paiement de dépenses. L'ascendant doit déclarer la pension reçue.",
+        "article_cgi": "Article 156 II-2° du CGI",
+        "forfait_hebergement": 3968
+      },
+      "6GJ": {
+        "libelle": "Pensions alimentaires versées à des ascendants - Déclarant 2",
+        "type": "montant"
+      },
+      "6EL": {
+        "libelle": "Pensions alimentaires versées : part du montant correspondant à l'hébergement",
+        "type": "montant",
+        "description": "Part de la pension alimentaire correspondant à l'avantage en nature pour l'hébergement d'un ascendant sous votre toit. Forfait : 3 968€ par personne accueillie (sans justificatif requis)."
+      }
+    },
+    "traitements_salaires": {
+      "1AJ": {
+        "libelle": "Traitements, salaires - Déclarant 1",
+        "type": "montant",
+        "description": "Salaires nets imposables du déclarant 1 (montant pré-rempli par l'employeur). Correspond au cumul net imposable figurant sur le dernier bulletin de paie de l'année.",
+        "formulaire": "2042",
+        "ligne": "1",
+        "article_cgi": "Article 79 et 82 du CGI"
+      },
+      "1BJ": {
+        "libelle": "Traitements, salaires - Déclarant 2",
+        "type": "montant",
+        "description": "Salaires nets imposables du déclarant 2 (conjoint ou partenaire PACS).",
+        "formulaire": "2042",
+        "ligne": "1",
+        "article_cgi": "Article 79 et 82 du CGI"
+      },
+      "1CJ": {
+        "libelle": "Traitements, salaires - Première personne à charge",
+        "type": "montant",
+        "description": "Salaires nets imposables de la première personne à charge."
+      },
+      "1DJ": {
+        "libelle": "Traitements, salaires - Deuxième personne à charge",
+        "type": "montant"
+      },
+      "1AK": {
+        "libelle": "Heures supplémentaires exonérées - Déclarant 1",
+        "type": "montant",
+        "description": "Rémunération des heures supplémentaires et complémentaires exonérée (plafond 7 500 € ou 5 000 €).",
+        "article_cgi": "Article 81 quater du CGI"
+      },
+      "1BK": {
+        "libelle": "Heures supplémentaires exonérées - Déclarant 2",
+        "type": "montant"
+      },
+      "1AP": {
+        "libelle": "Indemnités de stage ou d'apprentissage - Déclarant 1",
+        "type": "montant",
+        "description": "Part imposable des indemnités de stage ou rémunérations d'apprentissage (après abattement)."
+      },
+      "1GA": {
+        "libelle": "Abattement forfaitaire Assistants maternels/familiaux - Déclarant 1",
+        "type": "montant"
+      }
+    },
+    "frais_reels": {
+      "1AK_FRAIS": {
+        "case": "1AK",
+        "libelle": "Frais réels - Déclarant 1 (si option frais réels au lieu des 10%)",
+        "type": "montant",
+        "description": "Si le contribuable opte pour la déduction des frais réels au lieu de l'abattement forfaitaire de 10%. Doit joindre le détail des frais."
+      },
+      "1BK_FRAIS": {
+        "case": "1BK",
+        "libelle": "Frais réels - Déclarant 2",
+        "type": "montant"
+      }
+    },
+    "pensions_retraites": {
+      "1AS": {
+        "libelle": "Pensions, retraites, rentes - Déclarant 1",
+        "type": "montant",
+        "description": "Pensions de retraite, pensions d'invalidité, rentes viagères à titre gratuit.",
+        "article_cgi": "Article 79 du CGI",
+        "abattement": "Abattement de 10% (min 422€, max 4 123€ par foyer)"
+      },
+      "1BS": {
+        "libelle": "Pensions, retraites, rentes - Déclarant 2",
+        "type": "montant"
+      },
+      "1AO": {
+        "libelle": "Pensions alimentaires perçues - Déclarant 1",
+        "type": "montant",
+        "description": "Pensions alimentaires reçues (imposables en totalité, sans abattement de 10%)"
+      },
+      "1BO": {
+        "libelle": "Pensions alimentaires perçues - Déclarant 2",
+        "type": "montant"
+      }
+    },
+    "revenus_capitaux_mobiliers": {
+      "2DC": {
+        "libelle": "Revenus des actions et parts - dividendes",
+        "type": "montant",
+        "description": "Dividendes et distributions éligibles à l'abattement de 40%. Soumis au PFU de 30% (12,8% IR + 17,2% PS) sauf option barème.",
+        "article_cgi": "Article 200 A du CGI"
+      },
+      "2TR": {
+        "libelle": "Intérêts et autres produits de placement à revenu fixe",
+        "type": "montant",
+        "description": "Intérêts de comptes, livrets imposables, obligations. PFU 30% par défaut."
+      },
+      "2BH": {
+        "libelle": "Revenus déjà soumis aux prélèvements sociaux avec CSG déductible",
+        "type": "montant"
+      },
+      "2CK": {
+        "libelle": "Prélèvement forfaitaire déjà versé (acompte)",
+        "type": "montant",
+        "description": "Acompte de 12,8% déjà prélevé à la source sur les revenus de capitaux mobiliers"
+      },
+      "2OP": {
+        "libelle": "Option globale pour le barème progressif",
+        "type": "case_a_cocher",
+        "description": "Cocher cette case pour opter pour l'imposition au barème progressif au lieu du PFU 30%. Option globale pour tous les revenus de capitaux mobiliers et plus-values."
+      }
+    },
+    "plus_values": {
+      "3VG": {
+        "libelle": "Plus-value nette de cession de valeurs mobilières",
+        "type": "montant",
+        "description": "Plus-values de cession d'actions, obligations, OPCVM. PFU 30% par défaut, sauf option barème (case 2OP)."
+      },
+      "3VH": {
+        "libelle": "Moins-value nette de cession de valeurs mobilières",
+        "type": "montant",
+        "description": "Moins-values reportables sur 10 ans."
+      }
+    },
+    "revenus_fonciers": {
+      "4BA": {
+        "libelle": "Revenus fonciers imposables (régime réel)",
+        "type": "montant",
+        "description": "Bénéfice foncier net après déduction des charges (intérêts d'emprunt, travaux, assurance, taxe foncière). Déclaration 2044 jointe.",
+        "formulaire_annexe": "2044",
+        "article_cgi": "Articles 28 à 31 du CGI"
+      },
+      "4BE": {
+        "libelle": "Revenus fonciers - Micro-foncier",
+        "type": "montant",
+        "description": "Recettes brutes foncières (loyers). Si < 15 000€/an, le micro-foncier s'applique avec un abattement forfaitaire de 30%. Reporter le montant brut des loyers.",
+        "seuil": 15000,
+        "abattement": 0.30,
+        "article_cgi": "Article 32 du CGI"
+      },
+      "4BF": {
+        "libelle": "Déficit foncier imputable sur le revenu global",
+        "type": "montant",
+        "description": "Déficit foncier imputable sur le revenu global dans la limite de 10 700€ (ou 15 300€ pour le Périssol).",
+        "plafond": 10700
+      },
+      "4BC": {
+        "libelle": "Déficit foncier (régime réel)",
+        "type": "montant"
+      }
+    },
+    "charges_deductibles": {
+      "6DE": {
+        "libelle": "CSG déductible sur les revenus du patrimoine",
+        "type": "montant",
+        "description": "Part déductible de la CSG sur revenus du patrimoine (6,8% de la CSG de 9,2%)."
+      },
+      "6GU": {
+        "libelle": "Pensions alimentaires versées à des enfants majeurs",
+        "type": "montant",
+        "description": "Plafond : 6 674€ par enfant (ou 13 348€ si l'enfant majeur est chargé de famille).",
+        "plafond_par_enfant": 6674,
+        "article_cgi": "Article 156 II 2° du CGI"
+      },
+      "6GP": {
+        "libelle": "Pensions alimentaires versées à des enfants mineurs",
+        "type": "montant",
+        "description": "Pension versée pour un enfant mineur en cas de résidence alternée ou non."
+      },
+      "6GI": {
+        "libelle": "Pensions alimentaires versées à des ascendants",
+        "type": "montant",
+        "description": "Déductible sans plafond si les ascendants sont dans le besoin."
+      },
+      "6DD": {
+        "libelle": "Déductions diverses (épargne retraite PERP/PER)",
+        "type": "montant"
+      },
+      "6NS": {
+        "libelle": "Cotisations PER - Déclarant 1",
+        "type": "montant",
+        "description": "Versements volontaires sur un Plan d'Épargne Retraite. Déductible dans la limite du disponible fiscal.",
+        "article_cgi": "Article 163 quatervicies du CGI"
+      },
+      "6NT": {
+        "libelle": "Cotisations PER - Déclarant 2",
+        "type": "montant"
+      }
+    },
+    "reductions_credits": {
+      "7UF": {
+        "libelle": "Dons aux œuvres d'intérêt général",
+        "type": "montant",
+        "description": "Réduction de 66% du montant des dons, dans la limite de 20% du revenu imposable.",
+        "taux_reduction": 0.66,
+        "plafond_pct_revenu": 0.20,
+        "article_cgi": "Article 200 du CGI"
+      },
+      "7UD": {
+        "libelle": "Dons aux organismes d'aide aux personnes en difficulté",
+        "type": "montant",
+        "description": "Réduction de 75% dans la limite de 1 000€ (puis 66% au-delà).",
+        "taux_reduction": 0.75,
+        "plafond_75pct": 1000
+      },
+      "7DB": {
+        "libelle": "Emploi d'un salarié à domicile",
+        "type": "montant",
+        "description": "Crédit d'impôt de 50% des dépenses engagées, plafond 12 000€ (+ 1 500€ par enfant à charge, max 15 000€). Première année : 15 000€.",
+        "taux_credit": 0.50,
+        "plafond_base": 12000,
+        "supplement_enfant": 1500,
+        "plafond_max": 15000,
+        "article_cgi": "Article 199 sexdecies du CGI"
+      },
+      "7GA": {
+        "libelle": "Frais de garde d'enfants de moins de 6 ans - 1er enfant",
+        "type": "montant",
+        "description": "Crédit d'impôt de 50%, plafond 3 500€ par enfant (soit crédit max de 1 750€).",
+        "taux_credit": 0.50,
+        "plafond_par_enfant": 3500,
+        "article_cgi": "Article 200 quater B du CGI"
+      },
+      "7GB": {
+        "libelle": "Frais de garde d'enfants de moins de 6 ans - 2ème enfant",
+        "type": "montant"
+      },
+      "7GC": {
+        "libelle": "Frais de garde d'enfants de moins de 6 ans - 3ème enfant",
+        "type": "montant"
+      },
+      "7EA": {
+        "libelle": "Enfant au collège",
+        "type": "nombre",
+        "description": "Réduction de 61€ par enfant au collège.",
+        "montant_reduction": 61
+      },
+      "7EC": {
+        "libelle": "Enfant au lycée",
+        "type": "nombre",
+        "description": "Réduction de 153€ par enfant au lycée.",
+        "montant_reduction": 153
+      },
+      "7EF": {
+        "libelle": "Enfant dans l'enseignement supérieur",
+        "type": "nombre",
+        "description": "Réduction de 183€ par enfant dans le supérieur.",
+        "montant_reduction": 183
+      }
+    },
+    "prelevement_source": {
+      "8HV": {
+        "libelle": "Prélèvement à la source déjà retenu - Déclarant 1",
+        "type": "montant",
+        "description": "Total du PAS retenu par l'employeur durant l'année (pré-rempli)"
+      },
+      "8IV": {
+        "libelle": "Prélèvement à la source déjà retenu - Déclarant 2",
+        "type": "montant"
+      }
+    },
+    "micro_entrepreneur": {
+      "5KO": {
+        "libelle": "Micro-BIC ventes de marchandises (CA brut)",
+        "type": "montant",
+        "description": "Chiffre d'affaires brut des activités de vente. Abattement forfaitaire de 71%.",
+        "abattement": 0.71,
+        "seuil": 188700
+      },
+      "5KP": {
+        "libelle": "Micro-BIC prestations de services (CA brut)",
+        "type": "montant",
+        "description": "Chiffre d'affaires brut des prestations de services BIC. Abattement forfaitaire de 50%.",
+        "abattement": 0.50,
+        "seuil": 77700
+      },
+      "5HQ": {
+        "libelle": "Micro-BNC recettes brutes",
+        "type": "montant",
+        "description": "Recettes brutes des activités libérales (BNC). Abattement forfaitaire de 34%.",
+        "abattement": 0.34,
+        "seuil": 77700
+      }
+    },
+    "gains_salariaux_actions": {
+      "1TT": {
+        "libelle": "Gains de stock-options (plans attribués à compter du 28/09/2012) - Déclarant 1",
+        "type": "montant",
+        "description": "Gains de levée de stock-options. Si conservation ≥ 2 ans après attribution et ≥ 2 ans après levée : régime favorable. Sinon imposable comme salaire. Reporter en case 1TT le gain de levée (différence entre valeur à la levée et prix d'exercice).",
+        "formulaire": "2042-C",
+        "article_cgi": "Article 80 bis et 163 bis C du CGI"
+      },
+      "1UT": {
+        "libelle": "Gains de stock-options - Déclarant 2",
+        "type": "montant"
+      },
+      "1TZ": {
+        "libelle": "Gains d'acquisition d'actions gratuites / RSU - Déclarant 1",
+        "type": "montant",
+        "description": "Gains d'acquisition d'actions gratuites (AGA) ou RSU (Restricted Stock Units). Pour les plans attribués depuis le 01/01/2018 : fraction du gain ≤ 300 000€ imposée au barème après abattement de 50%. Fraction > 300 000€ imposée comme salaire (contribution salariale de 10%). Prélèvements sociaux de 17,2% sur la totalité.",
+        "formulaire": "2042-C",
+        "article_cgi": "Article 80 quaterdecies du CGI",
+        "seuil_abattement": 300000,
+        "abattement_sous_seuil": 0.50,
+        "contribution_salariale": 0.10
+      },
+      "1UZ": {
+        "libelle": "Gains d'acquisition d'actions gratuites / RSU - Déclarant 2",
+        "type": "montant"
+      },
+      "1WZ": {
+        "libelle": "Gains d'acquisition AGA/RSU imposables comme salaire (fraction > 300 000€) - Déclarant 1",
+        "type": "montant",
+        "description": "Part du gain d'acquisition d'AGA/RSU dépassant 300 000€, imposée comme traitements et salaires."
+      },
+      "1NY": {
+        "libelle": "Gains de cession de BSPCE - Déclarant 1",
+        "type": "montant",
+        "description": "Bons de Souscription de Parts de Créateur d'Entreprise. Si exercice ≥ 3 ans après attribution : PFU 12,8% + PS 17,2%. Si < 3 ans : imposé au barème comme salaire.",
+        "article_cgi": "Article 163 bis G du CGI"
+      }
+    },
+    "plus_values_detaillees": {
+      "3VG": {
+        "libelle": "Plus-value nette de cession de valeurs mobilières",
+        "type": "montant",
+        "description": "Plus-values de cession d'actions, obligations, OPCVM, parts de sociétés. PFU 30% par défaut (12,8% IR + 17,2% PS). Si option barème (case 2OP) : abattement pour durée de détention possible (titres acquis avant 2018 uniquement).",
+        "article_cgi": "Article 150-0 A du CGI"
+      },
+      "3VH": {
+        "libelle": "Moins-value nette de cession de valeurs mobilières",
+        "type": "montant",
+        "description": "Moins-values reportables sur les 10 années suivantes. Imputable uniquement sur des plus-values de même nature."
+      },
+      "3VD": {
+        "libelle": "Plus-values avec abattement renforcé (dirigeant retraite)",
+        "type": "montant",
+        "description": "Plus-values de cession de titres de PME de moins de 10 ans bénéficiant de l'abattement renforcé (si option barème). Abattement : 50% si détention 1-4 ans, 65% si 4-8 ans, 85% si ≥ 8 ans.",
+        "article_cgi": "Article 150-0 D 1 quater du CGI"
+      },
+      "3VA": {
+        "libelle": "Plus-values avec abattement pour durée de détention (titres acquis avant 2018)",
+        "type": "montant",
+        "description": "Abattement de droit commun si option barème progressif : 50% si détention ≥ 2 ans et < 8 ans, 65% si ≥ 8 ans. Uniquement pour les titres acquis avant le 01/01/2018.",
+        "article_cgi": "Article 150-0 D du CGI"
+      },
+      "3VB": {
+        "libelle": "Montant de l'abattement pour durée de détention",
+        "type": "montant"
+      },
+      "3SJ": {
+        "libelle": "Plus-value de cession de titres de jeune entreprise innovante (JEI)",
+        "type": "montant",
+        "description": "Exonération si titres détenus depuis plus de 5 ans et si la société remplit les conditions JEI.",
+        "article_cgi": "Article 150-0 A III-7 du CGI"
+      },
+      "3VE": {
+        "libelle": "Plus-value de cession de titres de dirigeant partant en retraite",
+        "type": "montant",
+        "description": "Abattement fixe de 500 000€ sur la plus-value de cession si le dirigeant part en retraite (sous conditions).",
+        "abattement_fixe": 500000,
+        "article_cgi": "Article 150-0 D ter du CGI"
+      },
+      "3VM": {
+        "libelle": "Plus-values de cession de parts de carried interest",
+        "type": "montant"
+      },
+      "3VT": {
+        "libelle": "Plus-values de cession de crypto-actifs",
+        "type": "montant",
+        "description": "Plus-values de cession de crypto-monnaies (Bitcoin, Ethereum, etc.). PFU 30% si total des cessions > 305€ dans l'année. Formulaire 2086 annexé.",
+        "seuil_cessions": 305,
+        "formulaire_annexe": "2086",
+        "article_cgi": "Article 150 VH bis du CGI"
+      }
+    },
+    "pea": {
+      "description": "Plan d'Épargne en Actions — régime fiscal",
+      "2FU": {
+        "libelle": "Produits des contrats d'assurance-vie et PEA en cas de retrait avant 5 ans",
+        "type": "montant",
+        "description": "Gains PEA retirés avant 5 ans : soumis au PFU 30% (ou option barème). Après 5 ans : exonération d'IR (prélèvements sociaux de 17,2% restent dus)."
+      },
+      "2DH": {
+        "libelle": "Produits d'assurance-vie et PEA soumis aux prélèvements sociaux",
+        "type": "montant"
+      }
+    },
+    "revenus_societes_parts": {
+      "2DC": {
+        "libelle": "Dividendes d'actions et parts de sociétés (SA, SARL, SAS)",
+        "type": "montant",
+        "description": "Dividendes perçus en tant qu'actionnaire ou associé d'une SA, SAS, SARL soumise à l'IS. PFU 30% par défaut. Si option barème (case 2OP) : abattement de 40% applicable. Inclut les dividendes de SCPI fiscalement transparentes soumises à l'IS.",
+        "article_cgi": "Article 158-3-2° du CGI (abattement 40%)"
+      },
+      "2TS": {
+        "libelle": "Produits imposables de SCPI / revenus de parts de sociétés",
+        "type": "montant",
+        "description": "Revenus distribués par les SCPI (société civile de placement immobilier) : la part de revenus financiers. Les revenus fonciers des SCPI sont déclarés en cases 4BA ou 4BE."
+      },
+      "2AB": {
+        "libelle": "Crédits d'impôt sur valeurs étrangères (retenue à la source étranger)",
+        "type": "montant",
+        "description": "Impôt déjà retenu à la source sur les dividendes ou intérêts d'origine étrangère. Récupérable sous forme de crédit d'impôt."
+      },
+      "2CG": {
+        "libelle": "Revenus des lignes 2DC, 2CH soumis au prélèvement de 21%",
+        "type": "montant"
+      },
+      "2BH": {
+        "libelle": "Revenus déjà soumis aux prélèvements sociaux avec CSG déductible",
+        "type": "montant",
+        "description": "Revenus déjà soumis aux prélèvements sociaux (ex : assurance-vie, SCPI) avec part de CSG déductible de 6,8%."
+      },
+      "2GO": {
+        "libelle": "Revenus distribués via SCI/SCPI - part de revenus financiers",
+        "type": "montant"
+      }
+    },
+    "revenus_sci_transparente": {
+      "description": "SCI soumise à l'IR (transparence fiscale) — les associés déclarent directement",
+      "4BA_SCI": {
+        "case": "4BA",
+        "libelle": "Quote-part de revenus fonciers SCI (régime réel) - à reporter en 4BA",
+        "type": "montant",
+        "description": "Les associés d'une SCI soumise à l'IR déclarent leur quote-part de revenus fonciers. Régime réel via déclaration 2044 (qui inclut la 2072 de la SCI). Reporter le résultat foncier net en case 4BA.",
+        "formulaire_annexe": "2044 + 2072",
+        "article_cgi": "Article 8 du CGI"
+      },
+      "4BE_SCI": {
+        "case": "4BE",
+        "libelle": "Quote-part de revenus fonciers SCI (micro-foncier) - à reporter en 4BE",
+        "type": "montant",
+        "description": "Si éligible au micro-foncier (total revenus fonciers bruts < 15 000€ et SCI non soumise à un régime spécial), reporter la quote-part brute en 4BE."
+      }
+    },
+    "scpi": {
+      "description": "SCPI (Société Civile de Placement Immobilier) — déclaration multi-cases",
+      "4BA_SCPI": {
+        "case": "4BA",
+        "libelle": "Revenus fonciers SCPI (régime réel)",
+        "type": "montant",
+        "description": "Quote-part de revenus fonciers nets de la SCPI. Les SCPI fournissent un IFU détaillant la répartition : revenus fonciers (→ 4BA), revenus financiers (→ 2TS ou 2TR), plus-values immobilières (→ déclarées par la SCPI elle-même). Déclaration 2044 obligatoire."
+      },
+      "2TS_SCPI": {
+        "case": "2TS",
+        "libelle": "Revenus financiers SCPI",
+        "type": "montant",
+        "description": "Part des revenus financiers distribués par la SCPI (intérêts, dividendes). Reportés en case 2TS."
+      },
+      "2AB_SCPI": {
+        "case": "2AB",
+        "libelle": "Crédits d'impôt étrangers SCPI",
+        "type": "montant",
+        "description": "Si la SCPI détient des biens à l'étranger, crédit d'impôt pour éviter la double imposition."
+      }
+    },
+    "societe_is_dirigeant": {
+      "description": "Cas du dirigeant d'une société soumise à l'IS (SA, SAS, SARL)",
+      "1AJ_DIRIGEANT": {
+        "case": "1AJ",
+        "libelle": "Rémunération du dirigeant (gérant, président) - en 1AJ ou 1BJ",
+        "type": "montant",
+        "description": "La rémunération du dirigeant d'une société à l'IS est imposée comme des traitements et salaires (case 1AJ/1BJ). Pour le gérant majoritaire de SARL (TNS), la rémunération est déclarée en case 1GB (article 62 du CGI)."
+      },
+      "1GB": {
+        "libelle": "Rémunération gérant majoritaire SARL (article 62) - Déclarant 1",
+        "type": "montant",
+        "description": "Rémunération du gérant majoritaire de SARL soumise à l'IS. Régime de l'article 62 du CGI : imposée comme des traitements et salaires avec abattement de 10% ou frais réels.",
+        "article_cgi": "Article 62 du CGI"
+      },
+      "1HB": {
+        "libelle": "Rémunération gérant majoritaire SARL (article 62) - Déclarant 2",
+        "type": "montant"
+      },
+      "2DC_DIVIDENDES": {
+        "case": "2DC",
+        "libelle": "Dividendes versés par la société au dirigeant",
+        "type": "montant",
+        "description": "Dividendes versés au dirigeant par sa société (SA, SAS, SARL). PFU 30% par défaut. ATTENTION pour le gérant majoritaire de SARL : les dividendes dépassant 10% du capital social + primes d'émission + CCA sont soumis aux cotisations sociales TNS (et non aux PS de 17,2%)."
+      }
+    },
+    "societe_ir_bic_bnc": {
+      "description": "Sociétés soumises à l'IR (EURL, SNC, SCI option IR) — associé déclare sa quote-part",
+      "5KC": {
+        "libelle": "Revenus industriels et commerciaux (BIC) professionnels - régime réel - Déclarant 1",
+        "type": "montant",
+        "description": "Quote-part de bénéfice BIC d'une société soumise à l'IR (EURL, SNC). Déclaration 2031 jointe.",
+        "formulaire_annexe": "2031"
+      },
+      "5LC": {
+        "libelle": "Revenus industriels et commerciaux (BIC) professionnels - régime réel - Déclarant 2",
+        "type": "montant"
+      },
+      "5HY": {
+        "libelle": "Revenus non commerciaux (BNC) professionnels - régime réel - Déclarant 1",
+        "type": "montant",
+        "description": "Quote-part de bénéfice BNC. Déclaration 2035 jointe.",
+        "formulaire_annexe": "2035"
+      },
+      "5IY": {
+        "libelle": "Revenus non commerciaux (BNC) professionnels - régime réel - Déclarant 2",
+        "type": "montant"
+      }
+    },
+    "location_meublee": {
+      "description": "Location meublée — LMNP (Loueur Meublé Non Professionnel) et LMP (Loueur Meublé Professionnel). Les revenus de location meublée sont des BIC, pas des revenus fonciers.",
+      "5ND": {
+        "libelle": "LMNP Micro-BIC - Recettes brutes location meublée classique - Déclarant 1",
+        "type": "montant",
+        "description": "Location meublée longue durée (bail 1 an ou 9 mois étudiant) en micro-BIC. Abattement forfaitaire de 50%. Seuil : 77 700€ de recettes annuelles.",
+        "abattement": 0.50,
+        "seuil": 77700,
+        "article_cgi": "Article 50-0 du CGI"
+      },
+      "5OD": {
+        "libelle": "LMNP Micro-BIC - Recettes brutes location meublée classique - Déclarant 2",
+        "type": "montant"
+      },
+      "5NG": {
+        "libelle": "LMNP Micro-BIC - Recettes brutes meublé de tourisme classé - Déclarant 1",
+        "type": "montant",
+        "description": "Location meublée de tourisme classé (saisonnier classé) en micro-BIC. Abattement forfaitaire de 71%. Seuil : 188 700€.",
+        "abattement": 0.71,
+        "seuil": 188700,
+        "article_cgi": "Article 50-0 du CGI"
+      },
+      "5OG": {
+        "libelle": "LMNP Micro-BIC - Recettes brutes meublé de tourisme classé - Déclarant 2",
+        "type": "montant"
+      },
+      "5NJ": {
+        "libelle": "LMNP Micro-BIC - Recettes brutes meublé de tourisme non classé / Airbnb - Déclarant 1",
+        "type": "montant",
+        "description": "Location saisonnière meublée non classée (type Airbnb). Micro-BIC avec abattement de 50%. Seuil : 77 700€. ATTENTION : depuis 2024, possible réduction de l'abattement à 30% et seuil à 15 000€ pour les meublés de tourisme non classés en zone tendue (vérifier la loi de finances en vigueur).",
+        "abattement": 0.50,
+        "seuil": 77700
+      },
+      "5OJ": {
+        "libelle": "LMNP Micro-BIC - Recettes brutes meublé de tourisme non classé - Déclarant 2",
+        "type": "montant"
+      },
+      "5NA": {
+        "libelle": "LMNP Régime réel - Bénéfice location meublée - Déclarant 1",
+        "type": "montant",
+        "description": "Bénéfice net de la location meublée au régime réel simplifié. Permet la déduction des charges réelles ET l'amortissement du bien (immobilier + mobilier). Déclaration 2031 jointe. L'amortissement n'est pas réintégré en cas de vente (avantage majeur du LMNP réel).",
+        "formulaire_annexe": "2031 + 2033",
+        "article_cgi": "Article 39C du CGI"
+      },
+      "5OA": {
+        "libelle": "LMNP Régime réel - Bénéfice location meublée - Déclarant 2",
+        "type": "montant"
+      },
+      "5NY": {
+        "libelle": "LMNP Régime réel - Déficit location meublée - Déclarant 1",
+        "type": "montant",
+        "description": "Déficit LMNP : reportable sur les revenus de location meublée uniquement pendant 10 ans. Non imputable sur le revenu global (sauf LMP)."
+      },
+      "5OY": {
+        "libelle": "LMNP Régime réel - Déficit location meublée - Déclarant 2",
+        "type": "montant"
+      },
+      "5KC_LMP": {
+        "case": "5KC",
+        "libelle": "LMP Régime réel - Bénéfice - Déclarant 1",
+        "type": "montant",
+        "description": "Loueur Meublé Professionnel (LMP) si recettes > 23 000€/an ET recettes > autres revenus du foyer. BIC professionnel : déficit imputable sur le revenu global. Plus-values : régime des plus-values professionnelles (exonération possible si < 90 000€ de recettes sur 2 ans).",
+        "seuil_recettes": 23000,
+        "article_cgi": "Article 155 IV du CGI"
+      }
+    },
+    "location_nue_detaillee": {
+      "description": "Location nue (non meublée) — bail de 3 ans minimum (résidence principale du locataire) ou 6 ans (convention ANAH)",
+      "4BA": {
+        "libelle": "Revenus fonciers nets (régime réel) - Location nue",
+        "type": "montant",
+        "description": "Bail nu classique (3 ans minimum). Revenus = loyers bruts - charges déductibles (intérêts emprunt, travaux, assurance PNO, taxe foncière, frais de gestion 20€/lot, frais de gérance, provisions charges copro). Déclaration 2044.",
+        "charges_deductibles": ["intérêts d'emprunt", "travaux d'entretien et réparation", "travaux d'amélioration (logement)", "assurance PNO", "taxe foncière (hors ordures ménagères)", "frais de gestion forfaitaire 20€/lot", "honoraires de gérance", "provisions pour charges de copropriété"],
+        "formulaire_annexe": "2044"
+      },
+      "4BE": {
+        "libelle": "Revenus fonciers bruts (micro-foncier) - Location nue",
+        "type": "montant",
+        "description": "Micro-foncier si revenus fonciers bruts < 15 000€/an (toutes propriétés confondues, y compris quote-parts SCI/SCPI). Reporter les loyers bruts (hors charges). Abattement automatique de 30%.",
+        "seuil": 15000,
+        "abattement": 0.30,
+        "exclusions": ["Monuments historiques", "Dispositifs spéciaux (Pinel, Denormandie, etc.)"]
+      },
+      "4BF": {
+        "libelle": "Déficit foncier imputable sur le revenu global",
+        "type": "montant",
+        "description": "Déficit foncier (charges > loyers) imputable sur le revenu global dans la limite de 10 700€/an. Le surplus est reportable sur les revenus fonciers des 10 années suivantes. Condition : maintenir la location pendant 3 ans après l'imputation.",
+        "plafond": 10700,
+        "report": "10 ans sur revenus fonciers"
+      }
+    },
+    "investissements_immobiliers": {
+      "7QA": {
+        "libelle": "Investissement Pinel - Engagement 6 ans - Métropole",
+        "type": "montant",
+        "description": "Réduction Pinel : 9% sur 6 ans (1,5%/an), 12% sur 9 ans, 14% sur 12 ans (taux réduits depuis 2023 sauf Pinel+). Plafond investissement : 300 000€ et 5 500€/m².",
+        "article_cgi": "Article 199 novovicies du CGI"
+      },
+      "7QD": {
+        "libelle": "Investissement Denormandie - Engagement 6 ans",
+        "type": "montant",
+        "description": "Même fonctionnement que Pinel mais pour l'ancien avec travaux (25% minimum du coût total). Zones éligibles : communes Action Cœur de Ville."
+      }
+    },
+    "locataire": {
+      "description": "Déclarations et dispositifs pour les locataires de leur résidence principale",
+      "7UD_DEMENAGEMENT": {
+        "description": "Pas de case spécifique pour les locataires sur le formulaire 2042. Les locataires ne déduisent PAS leur loyer. Seuls dispositifs :",
+        "type": "info"
+      },
+      "note_apl": {
+        "description": "L'APL (Aide Personnalisée au Logement) et l'ALS (Allocation de Logement Sociale) ne sont PAS déclarées sur la 2042. Ce sont des prestations CAF non imposables. Mais attention : percevoir des APL empêche de bénéficier de la demi-part supplémentaire pour les enfants majeurs rattachés qui ont leur propre logement.",
+        "type": "info"
+      },
+      "note_visale": {
+        "description": "La garantie Visale n'a pas d'impact fiscal.",
+        "type": "info"
+      },
+      "7DB_LOCATAIRE": {
+        "case": "7DB",
+        "description": "Un locataire peut bénéficier du crédit d'impôt emploi à domicile (case 7DB) comme un propriétaire."
+      }
+    },
+    "ifi": {
+      "description": "Impôt sur la Fortune Immobilière (IFI) - Déclaration séparée 2042-IFI",
+      "9HI": {
+        "libelle": "Valeur brute du patrimoine immobilier",
+        "type": "montant",
+        "description": "Valeur vénale au 1er janvier de tous les biens immobiliers (résidence principale avec abattement de 30%, biens locatifs, parts de SCI/SCPI, OPCI). Seuil : 1 300 000€ de patrimoine immobilier net.",
+        "seuil": 1300000,
+        "abattement_rp": 0.30,
+        "formulaire": "2042-IFI"
+      },
+      "9GI": {
+        "libelle": "Dettes déductibles IFI",
+        "type": "montant",
+        "description": "Emprunts immobiliers en cours, travaux, taxes foncières. Déductibles de la valeur brute pour obtenir le patrimoine net taxable."
+      },
+      "bareme_ifi": {
+        "description": "Barème IFI 2025",
+        "tranches": [
+          {"min": 0, "max": 800000, "taux": 0},
+          {"min": 800000, "max": 1300000, "taux": 0.005},
+          {"min": 1300000, "max": 2570000, "taux": 0.007},
+          {"min": 2570000, "max": 5000000, "taux": 0.01},
+          {"min": 5000000, "max": 10000000, "taux": 0.0125},
+          {"min": 10000000, "max": null, "taux": 0.015}
+        ],
+        "note": "Seuil d'imposition à 1 300 000€ mais le barème démarre à 800 000€ (première tranche à 0%)"
+      }
+    },
+    "divers": {
+      "2042_IOM": {
+        "description": "Investissements outre-mer — Formulaire 2042-IOM"
+      },
+      "2042_RICI": {
+        "description": "Réductions et crédits d'impôt — Formulaire 2042-RICI"
+      },
+      "2042_C": {
+        "description": "Complémentaire : revenus complémentaires — Formulaire 2042-C"
+      },
+      "2042_C_PRO": {
+        "description": "Professions non salariées — Formulaire 2042-C-PRO"
+      }
+    }
+  },
+  "regles_parts_fiscales": {
+    "description": "Nombre de parts du quotient familial selon la situation",
+    "base": {
+      "celibataire": 1.0,
+      "marie_pacse": 2.0,
+      "veuf_avec_enfants": 1.0,
+      "divorce": 1.0
+    },
+    "enfants_a_charge": {
+      "1er_enfant": 0.5,
+      "2eme_enfant": 0.5,
+      "a_partir_3eme": 1.0,
+      "enfant_residence_alternee_diviseur": 2,
+      "description": "Les enfants en résidence alternée comptent pour la moitié"
+    },
+    "demi_parts_supplementaires": {
+      "parent_isole": 0.5,
+      "invalide": 0.5,
+      "ancien_combattant_75ans": 0.5,
+      "veuf_avec_enfants_bonus": 1.0
+    }
+  },
+  "prelevements_sociaux": {
+    "csg": {"taux": 0.092, "deductible": 0.068},
+    "crds": {"taux": 0.005, "deductible": false},
+    "prelevement_solidarite": {"taux": 0.072},
+    "total": 0.172,
+    "description": "Prélèvements sociaux sur revenus du patrimoine et placements : 17,2% au total"
+  }
+}
