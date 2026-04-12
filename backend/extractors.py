@@ -139,6 +139,95 @@ async def extract_structured(filename: str, content: str) -> dict | None:
     return result
 
 
+async def extract_batch(documents: list[dict]) -> list[dict | None]:
+    """Extrait les donnees de plusieurs petits documents en un seul appel LLM.
+
+    documents: [{"filename": "...", "content": "..."}]
+    Retourne une liste de resultats (meme ordre).
+
+    Utile pour les documents < 1500 chars : on en met 3-4 dans un seul prompt.
+    """
+    if not documents:
+        return []
+
+    # Construire un prompt multi-documents
+    docs_block = ""
+    for i, doc in enumerate(documents):
+        content = doc["content"]
+        content, _ = sanitize_document_content(content, doc["filename"])
+        if len(content) > 2000:
+            content = content[:1200] + "\n[...]\n" + content[-600:]
+        docs_block += f"\n### DOCUMENT {i+1}: {doc['filename']}\n{content}\n"
+
+    prompt = (
+        f"## Documents a analyser ({len(documents)} documents)\n"
+        f"{docs_block}\n\n"
+        "## Instructions\n\n"
+        "Pour CHAQUE document ci-dessus, extrais les informations fiscales.\n"
+        "Reponds en JSON : un tableau avec un objet par document.\n\n"
+        "```json\n[\n"
+        '  {"doc_id": "nom_fichier.pdf", "type_document": "TYPE", '
+        '"montants": {"cle": valeur}, "entite": {"nom": "", "role": ""}, '
+        '"donnees_manquantes": [], "confiance": 0.9, "resume": "..."},\n'
+        "  ...\n]\n```\n\n"
+        "IMPORTANT: retourne un TABLEAU JSON avec exactement "
+        f"{len(documents)} elements, un par document."
+    )
+
+    response = await query_llm(prompt, EXTRACTION_SYSTEM, temperature=0.1, max_tokens=3000)
+    parsed = _parse_json_array(response)
+
+    if parsed and len(parsed) == len(documents):
+        for i, result in enumerate(parsed):
+            if result:
+                result["doc_id"] = documents[i]["filename"]
+                montants = result.get("montants", {})
+                result["montants"] = {k: v for k, v in montants.items() if v is not None}
+        return parsed
+
+    # Si le batch echoue, fallback un par un
+    print(f"[EXTRACT] Batch de {len(documents)} echoue, fallback individuel")
+    results = []
+    for doc in documents:
+        r = await extract_structured(doc["filename"], doc["content"])
+        results.append(r)
+    return results
+
+
+def _parse_json_array(text: str) -> list | None:
+    """Parse un tableau JSON depuis une reponse LLM."""
+    if not text or text.startswith("ERREUR"):
+        return None
+    try:
+        result = json.loads(text)
+        if isinstance(result, list):
+            return result
+    except json.JSONDecodeError:
+        pass
+
+    match = re.search(r"```(?:json)?\s*\n?(.*?)\n?\s*```", text, re.DOTALL)
+    if match:
+        try:
+            result = json.loads(match.group(1))
+            if isinstance(result, list):
+                return result
+        except json.JSONDecodeError:
+            pass
+
+    # Chercher le premier [ ... ]
+    start = text.find("[")
+    end = text.rfind("]")
+    if start >= 0 and end > start:
+        try:
+            result = json.loads(text[start:end+1])
+            if isinstance(result, list):
+                return result
+        except json.JSONDecodeError:
+            pass
+
+    return None
+
+
 def _parse_json(text: str) -> dict | None:
     """Parse JSON depuis une réponse LLM."""
     if not text or text.startswith("ERREUR"):

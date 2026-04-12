@@ -23,7 +23,7 @@ from rag import FiscalRAG
 from fiscal_profile import FiscalProfile
 from session_store import SessionStore
 from extraction_store import ExtractionStore
-from extractors import extract_structured
+from extractors import extract_structured, extract_batch
 
 SYSTEM_PROMPT = (
     "Tu es un assistant fiscal expert en déclaration d'impôts française. "
@@ -511,61 +511,123 @@ class AgentFiscal:
                 pass
 
     async def _run_ingestion(self, files: list[Path], folder: Path):
-        """Boucle d'extraction pure (utilisable en foreground ou background)."""
+        """Boucle d'extraction avec batching des petits documents."""
         total = len(files)
         already_done = {e.get("doc_id") for e in self.extractions.get_all()} if self.extractions else set()
 
+        # Separer les fichiers a traiter en 2 groupes : petits (batchables) et gros
+        BATCH_CONTENT_LIMIT = 1500  # chars — en dessous, on batch
+        BATCH_SIZE = 3  # docs par batch
+
+        pending_batch: list[dict] = []  # [{"filename", "content", "index"}]
+        processed = 0
+
         for i, f in enumerate(files):
             filename = f.name
-            pct = int((i / total) * 100)
+            pct = int(((processed) / total) * 100) if total else 0
 
             if filename in already_done:
+                processed += 1
                 await self._send_progress({
-                    "type": "progress", "current": i + 1, "total": total,
-                    "percent": pct, "filename": filename,
+                    "type": "progress", "current": processed, "total": total,
+                    "percent": int((processed / total) * 100), "filename": filename,
                     "status": "skip", "detail": "Deja traite",
                 })
                 continue
 
-            await self._send_progress({
-                "type": "progress", "current": i + 1, "total": total,
-                "percent": pct, "filename": filename,
-                "status": "processing", "detail": "Extraction en cours...",
-            })
-
+            # Parser le document
             doc_data = self.parser.parse(str(f))
             if not doc_data or not doc_data.get("content"):
+                processed += 1
                 await self._send_progress({
-                    "type": "progress", "current": i + 1, "total": total,
-                    "percent": pct, "filename": filename,
+                    "type": "progress", "current": processed, "total": total,
+                    "percent": int((processed / total) * 100), "filename": filename,
                     "status": "error", "detail": "Contenu non extractible",
                 })
                 continue
 
-            extraction = await extract_structured(filename, doc_data["content"])
+            content = doc_data["content"]
+
+            # Petit document -> ajouter au batch
+            if len(content) <= BATCH_CONTENT_LIMIT:
+                pending_batch.append({"filename": filename, "content": content, "index": i})
+
+                # Lancer le batch quand il est plein
+                if len(pending_batch) >= BATCH_SIZE:
+                    processed = await self._flush_batch(pending_batch, processed, total)
+                    pending_batch = []
+                continue
+
+            # Gros document -> extraction individuelle
+            await self._send_progress({
+                "type": "progress", "current": processed + 1, "total": total,
+                "percent": int((processed / total) * 100), "filename": filename,
+                "status": "processing", "detail": "Extraction en cours...",
+            })
+
+            extraction = await extract_structured(filename, content)
+            processed += 1
 
             if extraction:
                 self.extractions.add(extraction)
                 doc_type = extraction.get("type_document", "?")
                 montants = extraction.get("montants", {})
-                detail = f"{doc_type}"
-                if montants:
-                    detail += f" | {', '.join(montants.keys())}"
+                detail = doc_type + (f" | {', '.join(montants.keys())}" if montants else "")
                 await self._send_progress({
-                    "type": "progress", "current": i + 1, "total": total,
-                    "percent": int(((i + 1) / total) * 100), "filename": filename,
+                    "type": "progress", "current": processed, "total": total,
+                    "percent": int((processed / total) * 100), "filename": filename,
                     "status": "ok", "detail": detail,
                 })
             else:
                 await self._send_progress({
-                    "type": "progress", "current": i + 1, "total": total,
-                    "percent": int(((i + 1) / total) * 100), "filename": filename,
+                    "type": "progress", "current": processed, "total": total,
+                    "percent": int((processed / total) * 100), "filename": filename,
                     "status": "error", "detail": "Extraction echouee",
                 })
+
+        # Flush le dernier batch partiel
+        if pending_batch:
+            processed = await self._flush_batch(pending_batch, processed, total)
 
         # Embeddings en une seule passe a la fin
         if self.extractions:
             self.extractions.finalize_embeddings()
+
+    async def _flush_batch(self, batch: list[dict], processed: int, total: int) -> int:
+        """Traite un batch de petits documents en un seul appel LLM."""
+        filenames = [d["filename"] for d in batch]
+        batch_label = ", ".join(filenames[:3])
+        if len(filenames) > 3:
+            batch_label += f"... (+{len(filenames)-3})"
+
+        await self._send_progress({
+            "type": "progress", "current": processed + 1, "total": total,
+            "percent": int((processed / total) * 100) if total else 0,
+            "filename": f"[Batch: {len(batch)} docs]",
+            "status": "processing", "detail": batch_label,
+        })
+
+        results = await extract_batch(batch)
+
+        for j, result in enumerate(results):
+            processed += 1
+            fname = batch[j]["filename"]
+            if result:
+                self.extractions.add(result)
+                doc_type = result.get("type_document", "?")
+                await self._send_progress({
+                    "type": "progress", "current": processed, "total": total,
+                    "percent": int((processed / total) * 100),
+                    "filename": fname, "status": "ok", "detail": doc_type,
+                })
+            else:
+                await self._send_progress({
+                    "type": "progress", "current": processed, "total": total,
+                    "percent": int((processed / total) * 100),
+                    "filename": fname, "status": "error", "detail": "Extraction echouee",
+                })
+
+        return processed
 
     async def _step_ingestion(self, files: list[Path], folder: Path) -> list[dict]:
         """Ingestion complete (mode foreground, pour la reprise)."""
@@ -680,19 +742,101 @@ class AgentFiscal:
         ]
 
     async def _structure_answer(self, question: str, answer: str) -> dict | None:
-        """Transforme une réponse libre en données structurées pour le profil."""
+        """Transforme une reponse en donnees structurees. Pattern matching LOCAL d'abord, LLM en fallback."""
+        # Essayer le pattern matching local (instantane, pas d'appel LLM)
+        local_result = self._structure_answer_local(question, answer)
+        if local_result:
+            print(f"[ANSWER] Structure localement (pas d'appel LLM)")
+            return local_result
+
+        # Fallback LLM pour les reponses complexes
+        print(f"[ANSWER] Reponse complexe, appel LLM...")
         prompt = (
-            f"Question posée : {question}\n"
-            f"Réponse de l'utilisateur : {answer}\n\n"
-            "Transforme cette réponse en données structurées pour un profil fiscal JSON.\n"
-            "Exemples de clés possibles : foyer.situation, foyer.nb_parts, foyer.nb_enfants_mineurs, "
-            "foyer.parent_isole, revenus.foncier_nu, revenus.foncier_meuble, charges_deductibles, "
-            "reductions_credits, etc.\n\n"
-            "Réponds UNIQUEMENT en JSON partiel (seulement les champs à mettre à jour) :\n"
-            '```json\n{"foyer": {"situation": "marié", "nb_enfants_mineurs": 2}}\n```'
+            f"Question : {question}\n"
+            f"Reponse : {answer}\n\n"
+            "Transforme en JSON partiel pour un profil fiscal.\n"
+            "Cles possibles : foyer.situation, foyer.nb_enfants_mineurs, foyer.parent_isole, "
+            "revenus.foncier_nu, revenus.foncier_meuble, charges_deductibles, reductions_credits\n\n"
+            '```json\n{"foyer": {"situation": "marie", "nb_enfants_mineurs": 2}}\n```'
         )
         response = await query_llm(prompt, SYSTEM_PROMPT, temperature=0.1, max_tokens=500)
         return _parse_json(response)
+
+    def _structure_answer_local(self, question: str, answer: str) -> dict | None:
+        """Pattern matching local pour les reponses courantes (instantane)."""
+        q = question.lower()
+        a = answer.lower().strip()
+
+        # --- Situation familiale ---
+        if "situation familiale" in q:
+            result = {"foyer": {}}
+            if any(w in a for w in ("marie", "marié", "mariee", "mariée")):
+                result["foyer"]["situation"] = "marie"
+            elif any(w in a for w in ("pacse", "pacsé", "pacsee", "pacsée", "pacs")):
+                result["foyer"]["situation"] = "pacse"
+            elif any(w in a for w in ("divorce", "divorcé", "divorcee", "divorcée", "separe")):
+                result["foyer"]["situation"] = "divorce"
+            elif any(w in a for w in ("veuf", "veuve")):
+                result["foyer"]["situation"] = "veuf"
+            elif any(w in a for w in ("celibataire", "célibataire", "seul")):
+                result["foyer"]["situation"] = "celibataire"
+            # Chercher le nombre d'enfants dans la meme reponse
+            nb = re.search(r"(\d+)\s*enfant", a)
+            if nb:
+                result["foyer"]["nb_enfants_mineurs"] = int(nb.group(1))
+            if result["foyer"]:
+                return result
+
+        # --- Nombre d'enfants ---
+        if "enfant" in q:
+            nb = re.search(r"(\d+)", a)
+            if nb:
+                return {"foyer": {"nb_enfants_mineurs": int(nb.group(1))}}
+            if any(w in a for w in ("aucun", "pas d", "0", "non", "zero")):
+                return {"foyer": {"nb_enfants_mineurs": 0}}
+
+        # --- Frais reels ---
+        if "frais" in q and "reel" in q:
+            if any(w in a for w in ("oui", "reel", "réel", "réels")):
+                return {"notes": ["Option frais reels"]}
+            if any(w in a for w in ("non", "10%", "abattement", "forfait")):
+                return {"notes": ["Abattement forfaitaire 10%"]}
+
+        # --- Regime foncier ---
+        if "micro" in q and "foncier" in q or "regime" in q and "foncier" in q:
+            if any(w in a for w in ("micro", "micro-foncier")):
+                return {"notes": ["Regime micro-foncier"]}
+            if any(w in a for w in ("reel", "réel")):
+                return {"notes": ["Regime reel foncier"]}
+
+        # --- Location nue vs meublee ---
+        if "location" in q or "meuble" in q or "lmnp" in q:
+            result = {"notes": []}
+            if any(w in a for w in ("nue", "nu ", "bail 3 ans", "non meuble")):
+                result["notes"].append("Location nue (bail 3 ans)")
+            if any(w in a for w in ("meuble", "meublé", "lmnp", "airbnb", "saisonni")):
+                result["notes"].append("Location meublee (LMNP)")
+            nb = re.search(r"(\d+)\s*(?:bien|appart|logement|maison)", a)
+            if nb:
+                result["notes"].append(f"{nb.group(1)} bien(s) locatif(s)")
+            if result["notes"]:
+                return result
+
+        # --- PEA / flat tax ---
+        if "pea" in q or "flat tax" in q or "bareme" in q:
+            if any(w in a for w in ("pfu", "flat", "forfaitaire", "30%")):
+                return {"revenus": {"capitaux_mobiliers": {"option_bareme": False}}}
+            if any(w in a for w in ("bareme", "barème", "progressif")):
+                return {"revenus": {"capitaux_mobiliers": {"option_bareme": True}}}
+
+        # --- Reponses oui/non simples ---
+        if any(w in a for w in ("non", "pas ", "aucun", "rien", "0")):
+            return {"notes": [f"Reponse: non a '{question[:60]}'"]}
+        if a in ("oui", "yes"):
+            return {"notes": [f"Reponse: oui a '{question[:60]}'"]}
+
+        # Pas de match local -> fallback LLM
+        return None
 
     # ==================================================================
     # Étape 3 : CALCUL — RAG + profil JSON -> cases 2042

@@ -144,21 +144,19 @@ function setStatus(state, text) {
 // --- Messages ---
 
 let ingestionInProgress = false;
+let ingestionTotal = 0;
 
 function handleMessage(data) {
     switch (data.type) {
         case 'progress':
             ingestionInProgress = true;
+            ingestionTotal = data.total || 0;
             updateProgressBar(data);
             return; // Ne pas toucher au typing indicator ni au input
         case 'assistant':
             removeTypingIndicator();
-            if (ingestionInProgress) {
-                // Pendant l'ingestion, les messages assistant ne suppriment PAS la barre
-                // Ils s'affichent au-dessus (liste de fichiers) ou en dessous (resume)
-                finalizeProgressBar();
-                ingestionInProgress = false;
-            }
+            // NE PAS toucher a la barre de progression quand elle est en cours
+            // Elle se finalisera uniquement quand percent == 100
             isWaiting = false;
             enableInput();
             addAssistantMessage(data.content);
@@ -175,7 +173,6 @@ function handleMessage(data) {
             addReportMessage(data.content, data.report_path);
             break;
         default:
-            // Ignorer les messages sans type connu qui n'ont pas de content
             if (!data.content) return;
             removeTypingIndicator();
             isWaiting = false;
@@ -234,8 +231,13 @@ function updateProgressBar(data) {
         entry.className = `progress-log-entry ${statusClass}`;
         entry.innerHTML = `<span class="log-icon">${statusIcon}</span> ${escapeHtml(filename)} <span class="log-detail">${escapeHtml(detail)}</span>`;
         log.appendChild(entry);
-        // Garder le scroll en bas du log
         log.scrollTop = log.scrollHeight;
+    }
+
+    // Finaliser automatiquement quand on atteint 100%
+    if (pct >= 100 && current >= total && total > 0) {
+        finalizeProgressBar();
+        ingestionInProgress = false;
     }
 
     scrollToBottom();
