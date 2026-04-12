@@ -140,12 +140,57 @@ class AgentFiscal:
     # Étape 0 : Démarrage — choix du dossier
     # ==================================================================
 
-    async def _step_start(self, folder_path: str) -> list[dict]:
-        folder_path = folder_path.strip().strip('"').strip("'")
+    def _looks_like_path(self, text: str) -> bool:
+        """Detecte si le texte ressemble a un chemin de fichier."""
+        text = text.strip().strip('"').strip("'")
+        # Un chemin contient generalement \ ou / et pas d'espace en debut
+        if re.match(r"^[A-Za-z]:\\", text):    # C:\Users\...
+            return True
+        if re.match(r"^/[a-zA-Z]", text):      # /home/user/... ou /c/Users/...
+            return True
+        if re.match(r"^~[/\\]", text):          # ~/Documents/...
+            return True
+        if re.match(r"^\.", text) and ("/" in text or "\\" in text):  # ./dossier
+            return True
+        return False
+
+    async def _step_start(self, user_input: str) -> list[dict]:
+        # Detecter si c'est un chemin ou une phrase conversationnelle
+        if not self._looks_like_path(user_input):
+            return [self._msg(
+                "Je comprends que vous souhaitez faire votre declaration d'impots !\n\n"
+                "Avant de commencer, j'ai besoin que vous prepariez un **dossier sur votre PC** "
+                "contenant tous vos documents fiscaux. Voici comment faire :\n\n"
+                "### 1. Creez un dossier\n"
+                "Par exemple : `C:\\Users\\VotreNom\\Documents\\Impots2025`\n\n"
+                "### 2. Rassemblez-y vos documents\n"
+                "Organisez-les si possible en sous-dossiers :\n"
+                "```\n"
+                "Impots2025/\n"
+                "  salaires/          <- bulletins de paie (PDF)\n"
+                "  immobilier/        <- taxes foncieres, baux, prets\n"
+                "  banque/            <- releves, IFU, dividendes\n"
+                "  assurance/         <- attestations habitation, PNO\n"
+                "  societe/           <- bilans SCI/SCPI, liasses\n"
+                "  divers/            <- dons, factures, attestations\n"
+                "```\n\n"
+                "### 3. Formats acceptes\n"
+                "PDF, PNG, JPG, Excel (.xlsx), CSV, Word (.docx), TXT\n\n"
+                "### 4. Donnez-moi le chemin\n"
+                "Une fois le dossier pret, collez ici le chemin complet, par exemple :\n\n"
+                "`C:\\Users\\VotreNom\\Documents\\Impots2025`\n\n"
+                "J'analyserai chaque document automatiquement pour construire votre profil fiscal."
+            )]
+
+        folder_path = user_input.strip().strip('"').strip("'")
         folder = Path(folder_path)
 
         if not folder.exists():
-            return [self._msg(f"Le dossier `{folder_path}` n'existe pas. Vérifiez le chemin.")]
+            return [self._msg(
+                f"Le dossier `{folder_path}` n'existe pas.\n\n"
+                "Verifiez le chemin et reessayez. Le chemin doit etre complet, par exemple :\n"
+                "`C:\\Users\\VotreNom\\Documents\\Impots2025`"
+            )]
         if not folder.is_dir():
             return [self._msg(f"`{folder_path}` n'est pas un dossier.")]
 
