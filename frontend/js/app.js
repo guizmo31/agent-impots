@@ -72,9 +72,11 @@ function renderSessionList(sessions) {
     }).join('');
 }
 
+let sessionName = '';
+
 function startNewSession() {
     const nameInput = document.getElementById('new-session-name');
-    const name = nameInput.value.trim() || `Déclaration ${new Date().toLocaleDateString('fr-FR')}`;
+    sessionName = nameInput.value.trim() || `Declaration ${new Date().toLocaleDateString('fr-FR')}`;
     sessionId = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString();
     showChat();
     connect();
@@ -113,10 +115,11 @@ function showSessionPicker() {
 
 function connect() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    ws = new WebSocket(`${protocol}//${window.location.host}/ws/${sessionId}`);
+    const nameParam = sessionName ? `?name=${encodeURIComponent(sessionName)}` : '';
+    ws = new WebSocket(`${protocol}//${window.location.host}/ws/${sessionId}${nameParam}`);
 
     ws.onopen = () => {
-        setStatus('connected', 'Connecté (local)');
+        setStatus('connected', 'Connecte (local)');
         enableInput();
     };
 

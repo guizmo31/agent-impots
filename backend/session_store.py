@@ -182,23 +182,43 @@ class SessionStore:
 
 
 def list_sessions() -> list[dict]:
-    """Liste toutes les sessions existantes."""
+    """Liste toutes les sessions existantes (uniquement les fichiers session principaux)."""
     sessions = []
     for f in SESSIONS_DIR.glob("*.json"):
+        # Ignorer les fichiers auxiliaires (_extractions.json, _profile.json)
+        if "_extractions" in f.name or "_profile" in f.name:
+            continue
+
         try:
             data = json.loads(f.read_text(encoding="utf-8"))
+
+            # Verifier que c'est bien un fichier de session (a un "state")
+            if "state" not in data:
+                continue
+
+            session_id = f.stem
+
+            # Compter les documents depuis le fichier _extractions.json
+            docs_count = 0
+            extractions_file = SESSIONS_DIR / f"{session_id}_extractions.json"
+            if extractions_file.exists():
+                try:
+                    ext_data = json.loads(extractions_file.read_text(encoding="utf-8"))
+                    docs_count = ext_data.get("count", len(ext_data.get("extractions", [])))
+                except (json.JSONDecodeError, OSError):
+                    pass
+
             sessions.append({
-                "session_id": f.stem,
+                "session_id": session_id,
                 "name": data.get("name", "Sans nom"),
                 "state": data.get("state", "?"),
                 "created_at": data.get("created_at", ""),
                 "updated_at": data.get("updated_at", ""),
-                "documents_count": len(data.get("parsed_documents", [])),
+                "documents_count": docs_count,
                 "has_result": data.get("computation_result") is not None,
             })
         except (json.JSONDecodeError, OSError):
             continue
 
-    # Trier par date de modification (plus récent en premier)
     sessions.sort(key=lambda s: s.get("updated_at", ""), reverse=True)
     return sessions

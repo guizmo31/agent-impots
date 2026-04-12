@@ -69,10 +69,14 @@ async def get_sessions():
 
 @app.delete("/api/sessions/{session_id}")
 async def delete_session(session_id: str):
-    """Supprime une session."""
+    """Supprime une session et tous ses fichiers associes."""
     store = SessionStore(session_id)
     store.delete()
-    # Retirer du cache mémoire
+    # Supprimer aussi les fichiers associes (extractions, profil)
+    from fiscal_profile import FiscalProfile
+    from extraction_store import ExtractionStore
+    FiscalProfile(session_id).delete()
+    ExtractionStore(session_id).delete()
     if session_id in active_agents:
         del active_agents[session_id]
     return JSONResponse({"status": "deleted"})
@@ -97,12 +101,19 @@ def _create_agent(session_id: str) -> AgentFiscal:
 async def websocket_endpoint(websocket: WebSocket, session_id: str):
     await websocket.accept()
 
-    # Créer ou restaurer l'agent
+    # Recuperer le nom de session depuis le query param
+    session_name = websocket.query_params.get("name", "")
+
+    # Creer ou restaurer l'agent
     if session_id not in active_agents:
         agent = _create_agent(session_id)
         active_agents[session_id] = agent
     else:
         agent = active_agents[session_id]
+
+    # Mettre a jour le nom si fourni
+    if session_name and agent.store:
+        agent.store.set("name", session_name)
 
     # Brancher le callback de progression pour envoyer en temps reel
     async def send_progress(msg: dict):
