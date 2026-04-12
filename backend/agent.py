@@ -10,6 +10,7 @@ Pipeline :
 Les PDFs ne sont jamais relus après l'étape 1.
 Le profil JSON est la SEULE source de vérité pour le calcul.
 """
+import asyncio
 import json
 import re
 from pathlib import Path
@@ -30,13 +31,33 @@ SYSTEM_PROMPT = (
     "Tu réponds en JSON quand demandé. Tu ne devines pas les informations manquantes."
 )
 
-# États du pipeline
+# Etats du pipeline
 STATE_WELCOME = "welcome"
 STATE_INGESTION = "ingestion"
+STATE_PARALLEL = "parallel"  # Questions structurantes + ingestion en parallele
 STATE_VALIDATION = "validation"
 STATE_CALCUL = "calcul"
 STATE_VERIFICATION = "verification"
 STATE_DONE = "done"
+
+# Patterns de noms de fichiers pour l'analyse rapide (sans LLM)
+FILENAME_PATTERNS = {
+    "salaire": {"keywords": ["paie", "salaire", "bulletin", "fiche_paie", "remuneration"], "category": "salaires"},
+    "impot": {"keywords": ["impot", "imposition", "2042", "avis_ir", "declaration"], "category": "impots"},
+    "foncier": {"keywords": ["foncier", "taxe_fonciere", "tf_", "fonciere"], "category": "immobilier"},
+    "pret": {"keywords": ["pret", "emprunt", "credit", "echeancier", "amortissement"], "category": "immobilier"},
+    "bail": {"keywords": ["bail", "contrat_location", "quittance", "loyer"], "category": "immobilier"},
+    "assurance": {"keywords": ["assurance", "attestation", "maif", "axa", "allianz", "cotisation_habitation", "pno"], "category": "assurance"},
+    "banque": {"keywords": ["releve", "bancaire", "compte", "banque", "transatlantique", "boursorama", "bnp", "sg"], "category": "banque"},
+    "titre": {"keywords": ["titre", "ifu", "portefeuille", "action", "dividende", "easybourse", "bourse"], "category": "titres"},
+    "scpi": {"keywords": ["scpi", "corum", "immorente", "primovie"], "category": "scpi"},
+    "sci": {"keywords": ["sci", "societe_civile", "bilan_sci", "2072"], "category": "sci"},
+    "societe": {"keywords": ["societe", "sasu", "sarl", "sas", "bilan", "liasse", "2065"], "category": "societe"},
+    "rsu": {"keywords": ["rsu", "stock", "option", "vesting", "acquisition", "gains_acquisition"], "category": "titres"},
+    "don": {"keywords": ["don", "recu_fiscal", "association", "cerfa"], "category": "deductions"},
+    "garde": {"keywords": ["garde", "creche", "nourrice", "pajemploi"], "category": "deductions"},
+    "retraite": {"keywords": ["retraite", "pension", "cnav", "agirc", "arrco", "per_"], "category": "retraite"},
+}
 
 
 class AgentFiscal:
@@ -54,10 +75,15 @@ class AgentFiscal:
         self.extractions = ExtractionStore(session_id) if session_id else None
 
         # Callbacks pour envoyer des messages en temps reel (set par app.py)
-        self.on_progress = None  # async def(msg: dict) -> None — progression ingestion
-        self.on_send = None      # async def(msg: dict) -> None — messages intermediaires
+        self.on_progress = None
+        self.on_send = None
 
-        # État courant
+        # Ingestion en arriere-plan (pendant que l'utilisateur repond aux questions)
+        self._ingestion_task: asyncio.Task | None = None
+        self._ingestion_done = False
+        self._files_to_ingest: list[Path] = []
+
+        # Etat courant
         self._restore_state()
 
     def _restore_state(self):
@@ -113,8 +139,9 @@ class AgentFiscal:
         if self.state == STATE_WELCOME:
             responses = await self._step_start(user_message)
         elif self.state == STATE_INGESTION:
-            # Reprise d'ingestion interrompue : l'utilisateur tape n'importe quoi pour relancer
             responses = await self._resume_ingestion()
+        elif self.state == STATE_PARALLEL:
+            responses = await self._handle_parallel_answer(user_message)
         elif self.state == STATE_VALIDATION:
             responses = await self._step_validation_answer(user_message)
         elif self.state == STATE_CALCUL:
@@ -203,23 +230,233 @@ class AgentFiscal:
         if not files:
             return [self._msg(f"Aucun document exploitable dans `{folder_path}`.\n\nFormats : PDF, PNG, JPG, XLSX, CSV, DOCX, TXT.")]
 
+        self._files_to_ingest = files
+
+        # === ANALYSE RAPIDE DES NOMS DE FICHIERS (instantanee, sans LLM) ===
+        quick_analysis = self._analyze_filenames(files, folder)
+
         file_list = "\n".join(f"  - `{f.relative_to(folder)}`" for f in files[:30])
         if len(files) > 30:
             file_list += f"\n  - ... et {len(files) - 30} autre(s)"
-        nb_total = len(files)
 
-        self.state = STATE_INGESTION
+        # Generer les questions structurantes basees sur les types detectes
+        preliminary_questions = self._generate_preliminary_questions(quick_analysis)
+        self.pending_questions = preliminary_questions
+        self.current_question_index = 0
+
+        # Passer en mode parallele : questions + ingestion simultanées
+        self.state = STATE_PARALLEL
+        self._ingestion_done = False
         self._persist()
 
-        # Envoyer la liste des fichiers IMMEDIATEMENT (avant l'ingestion)
+        # Envoyer le resume de l'analyse rapide
+        categories_found = quick_analysis.get("categories", {})
+        cat_summary = ""
+        if categories_found:
+            cat_summary = "**Types de documents detectes (analyse rapide) :**\n"
+            for cat, cat_files in categories_found.items():
+                cat_summary += f"- {cat} : {len(cat_files)} fichier(s)\n"
+            cat_summary += "\n"
+
         await self._send_now(
-            f"**{nb_total} document(s)** trouves :\n\n{file_list}\n\n"
-            "Je vais analyser chaque document un par un pour construire votre profil fiscal..."
+            f"**{len(files)} document(s)** trouves :\n\n{file_list}\n\n"
+            f"{cat_summary}"
+            "L'analyse approfondie de chaque document demarre **en arriere-plan**.\n"
+            "En attendant, je vais vous poser quelques questions pour mieux comprendre votre situation.\n"
         )
 
-        # L'ingestion envoie la progression en temps reel via on_progress
-        # et retourne le resume final + les messages de validation
-        return await self._step_ingestion(files, folder)
+        # Lancer l'ingestion en arriere-plan
+        self._ingestion_task = asyncio.create_task(
+            self._background_ingestion(files, folder)
+        )
+
+        # Poser la premiere question immediatement
+        if self.pending_questions:
+            total = len(self.pending_questions)
+            return [self._msg(
+                f"**Question 1/{total}** :\n{self.pending_questions[0]}"
+            )]
+
+        # Pas de questions (cas improbable) -> attendre l'ingestion
+        self.state = STATE_INGESTION
+        self._persist()
+        return [self._msg("Analyse des documents en cours...")]
+
+    # ==================================================================
+    # Analyse rapide des noms de fichiers (instantanee, sans LLM)
+    # ==================================================================
+
+    def _analyze_filenames(self, files: list[Path], folder: Path) -> dict:
+        """Analyse les noms de fichiers pour detecter les types de documents."""
+        categories: dict[str, list[str]] = {}
+        detected_types: set[str] = set()
+
+        for f in files:
+            name_lower = f.name.lower().replace("-", "_").replace(" ", "_")
+            matched = False
+            for doc_type, info in FILENAME_PATTERNS.items():
+                for keyword in info["keywords"]:
+                    if keyword in name_lower:
+                        cat = info["category"]
+                        categories.setdefault(cat, []).append(f.name)
+                        detected_types.add(doc_type)
+                        matched = True
+                        break
+                if matched:
+                    break
+            if not matched:
+                categories.setdefault("autres", []).append(f.name)
+
+        print(f"[QUICK] Analyse rapide : {len(detected_types)} types detectes sur {len(files)} fichiers")
+        for cat, cat_files in categories.items():
+            print(f"[QUICK]   {cat}: {len(cat_files)} fichier(s)")
+
+        return {"categories": categories, "detected_types": detected_types}
+
+    def _generate_preliminary_questions(self, quick_analysis: dict) -> list[str]:
+        """Genere des questions structurantes basees sur les types de documents detectes."""
+        questions = []
+        types = quick_analysis.get("detected_types", set())
+        categories = quick_analysis.get("categories", {})
+
+        # Questions universelles (toujours posees)
+        questions.append(
+            "Quelle est votre situation familiale au 31/12/2025 ? "
+            "(celibataire, marie(e), pacse(e), divorce(e), veuf/veuve)"
+        )
+        questions.append(
+            "Combien d'enfants avez-vous a charge ? "
+            "(mineurs, ou majeurs rattaches de moins de 25 ans en etudes)"
+        )
+
+        # Questions adaptees aux documents detectes
+        if "immobilier" in categories:
+            questions.append(
+                "Concernant vos biens immobiliers :\n"
+                "- Combien de biens possedez-vous ?\n"
+                "- Pour chaque bien loue : est-ce de la location nue (bail 3 ans) ou meublee (LMNP/Airbnb) ?\n"
+                "- Etes-vous au regime micro-foncier ou reel ?"
+            )
+
+        if "titres" in categories or "rsu" in types:
+            questions.append(
+                "Concernant vos revenus de placements :\n"
+                "- Avez-vous des RSU (Restricted Stock Units) ou stock-options ? Si oui, de quelle societe ?\n"
+                "- Avez-vous un PEA ?\n"
+                "- Preferez-vous le prelevement forfaitaire (flat tax 30%) ou l'option bareme ?"
+            )
+
+        if "societe" in categories or "sci" in categories or "scpi" in categories:
+            questions.append(
+                "Concernant vos societes :\n"
+                "- Quel type de societe ? (SCI, SCPI, SASU, SARL, SAS, EURL...)\n"
+                "- Regime fiscal : IR (transparence) ou IS ?\n"
+                "- Etes-vous gerant/president ? Recevez-vous une remuneration et/ou des dividendes ?"
+            )
+
+        if "salaire" in types:
+            questions.append(
+                "Pour vos salaires :\n"
+                "- Avez-vous opte pour les frais reels (au lieu de l'abattement 10%) ?\n"
+                "- Avez-vous des heures supplementaires exonerees ?"
+            )
+
+        if "retraite" in types:
+            questions.append(
+                "Percevez-vous une pension de retraite, d'invalidite ou une rente ?"
+            )
+
+        # Questions generales (si pas trop de questions deja)
+        if len(questions) < 6:
+            questions.append(
+                "Avez-vous des charges deductibles ?\n"
+                "- Dons a des associations\n"
+                "- Emploi a domicile (menage, garde d'enfants)\n"
+                "- Versements sur un PER (Plan Epargne Retraite)\n"
+                "- Pension alimentaire versee"
+            )
+
+        return questions
+
+    # ==================================================================
+    # Mode parallele : questions + ingestion en arriere-plan
+    # ==================================================================
+
+    async def _background_ingestion(self, files: list[Path], folder: Path):
+        """Lance l'ingestion en arriere-plan (pendant que l'utilisateur repond aux questions)."""
+        try:
+            print(f"[BACKGROUND] Demarrage ingestion de {len(files)} documents en arriere-plan")
+            await self._run_ingestion(files, folder)
+            self._ingestion_done = True
+            print(f"[BACKGROUND] Ingestion terminee")
+        except Exception as e:
+            print(f"[BACKGROUND] Erreur ingestion : {e}")
+            self._ingestion_done = True  # Marquer comme done meme en cas d'erreur
+
+    async def _handle_parallel_answer(self, answer: str) -> list[dict]:
+        """Gere les reponses pendant que l'ingestion tourne en arriere-plan."""
+        # Enregistrer la reponse
+        if self.current_question_index < len(self.pending_questions):
+            question = self.pending_questions[self.current_question_index]
+
+            # Structurer la reponse dans le profil
+            extraction = await self._structure_answer(question, answer)
+            if extraction:
+                self.profile.merge_user_answers(extraction)
+
+            self.current_question_index += 1
+            self._persist()
+
+        # Encore des questions ?
+        if self.current_question_index < len(self.pending_questions):
+            total = len(self.pending_questions)
+            idx = self.current_question_index
+
+            # Indiquer la progression de l'ingestion en arriere-plan
+            already_done = len(self.extractions.get_all()) if self.extractions else 0
+            total_files = len(self._files_to_ingest)
+            bg_status = ""
+            if not self._ingestion_done and total_files > 0:
+                bg_status = f"\n\n*Analyse en arriere-plan : {already_done}/{total_files} documents traites...*"
+
+            return [self._msg(
+                f"**Question {idx + 1}/{total}** :\n{self.pending_questions[idx]}{bg_status}"
+            )]
+
+        # Toutes les questions repondues -- attendre la fin de l'ingestion si necessaire
+        if not self._ingestion_done:
+            # Attendre l'ingestion avec un message
+            await self._send_now("Merci pour vos reponses ! L'analyse des documents est encore en cours...")
+
+            if self._ingestion_task:
+                await self._ingestion_task  # Attendre la fin
+
+            await self._send_now("Analyse terminee !")
+
+        # Construire le profil depuis les extractions
+        if self.extractions and self.profile:
+            profile_data = self.extractions.build_profile_data()
+            self.profile.merge_extraction(profile_data, "extraction_store")
+            self.profile.save()
+
+        # Afficher le resume
+        summary = self.extractions.get_summary() if self.extractions else {}
+        completeness = self.profile.get_completeness() if self.profile else 0
+        profile_preview = self.profile.get_for_llm() if self.profile else "{}"
+
+        msg = f"**Profil fiscal construit** (completude : {completeness:.0%})\n\n"
+        if summary.get("montants_cles"):
+            msg += "**Montants cles extraits :**\n"
+            for key, val in summary["montants_cles"].items():
+                msg += f"- {key} : {val:,.2f} EUR\n"
+            msg += "\n"
+
+        # Passer a la validation (questions complementaires basees sur le profil complet)
+        self.state = STATE_VALIDATION
+        self._persist()
+
+        validation_responses = await self._step_validation_detect_missing()
+        return [self._msg(msg)] + validation_responses
 
     async def _resume_ingestion(self) -> list[dict]:
         """Reprend une ingestion interrompue (crash, kill, fermeture navigateur)."""
@@ -273,159 +510,84 @@ class AgentFiscal:
             except Exception:
                 pass
 
-    async def _step_ingestion(self, files: list[Path], folder: Path) -> list[dict]:
-        """Pipeline : Document -> Extraction structurée -> ExtractionStore (RAG) -> FiscalProfile."""
+    async def _run_ingestion(self, files: list[Path], folder: Path):
+        """Boucle d'extraction pure (utilisable en foreground ou background)."""
         total = len(files)
-        ingested = 0
-        skipped = 0
-        errors = []
-
-        # Documents déjà traités (reprise de session)
         already_done = {e.get("doc_id") for e in self.extractions.get_all()} if self.extractions else set()
 
         for i, f in enumerate(files):
             filename = f.name
             pct = int((i / total) * 100)
-            print(f"[INGEST] [{i+1}/{total}] {filename}")
 
             if filename in already_done:
-                print(f"[INGEST]   -> Deja extrait, skip")
-                skipped += 1
                 await self._send_progress({
-                    "type": "progress",
-                    "current": i + 1,
-                    "total": total,
-                    "percent": pct,
-                    "filename": filename,
-                    "status": "skip",
-                    "detail": "Deja traite",
+                    "type": "progress", "current": i + 1, "total": total,
+                    "percent": pct, "filename": filename,
+                    "status": "skip", "detail": "Deja traite",
                 })
                 continue
 
-            # Notifier le début du traitement de ce document
             await self._send_progress({
-                "type": "progress",
-                "current": i + 1,
-                "total": total,
-                "percent": pct,
-                "filename": filename,
-                "status": "processing",
-                "detail": "Extraction en cours...",
+                "type": "progress", "current": i + 1, "total": total,
+                "percent": pct, "filename": filename,
+                "status": "processing", "detail": "Extraction en cours...",
             })
 
-            # 1. Parser le document brut
             doc_data = self.parser.parse(str(f))
             if not doc_data or not doc_data.get("content"):
-                errors.append(f"{filename} : contenu non extractible")
                 await self._send_progress({
-                    "type": "progress",
-                    "current": i + 1,
-                    "total": total,
-                    "percent": pct,
-                    "filename": filename,
-                    "status": "error",
-                    "detail": "Contenu non extractible",
+                    "type": "progress", "current": i + 1, "total": total,
+                    "percent": pct, "filename": filename,
+                    "status": "error", "detail": "Contenu non extractible",
                 })
                 continue
 
-            # 2. Extraction structurée universelle (1 appel LLM ciblé)
             extraction = await extract_structured(filename, doc_data["content"])
 
-            if extraction and extraction.get("montants"):
+            if extraction:
                 self.extractions.add(extraction)
-                ingested += 1
                 doc_type = extraction.get("type_document", "?")
-                montants_keys = ", ".join(extraction.get("montants", {}).keys())
+                montants = extraction.get("montants", {})
+                detail = f"{doc_type}"
+                if montants:
+                    detail += f" | {', '.join(montants.keys())}"
                 await self._send_progress({
-                    "type": "progress",
-                    "current": i + 1,
-                    "total": total,
-                    "percent": int(((i + 1) / total) * 100),
-                    "filename": filename,
-                    "status": "ok",
-                    "detail": f"{doc_type} | {montants_keys}",
-                })
-            elif extraction:
-                self.extractions.add(extraction)
-                ingested += 1
-                await self._send_progress({
-                    "type": "progress",
-                    "current": i + 1,
-                    "total": total,
-                    "percent": int(((i + 1) / total) * 100),
-                    "filename": filename,
-                    "status": "ok",
-                    "detail": f"{extraction.get('type_document', '?')} (pas de montants)",
+                    "type": "progress", "current": i + 1, "total": total,
+                    "percent": int(((i + 1) / total) * 100), "filename": filename,
+                    "status": "ok", "detail": detail,
                 })
             else:
-                errors.append(f"{filename} : extraction echouee")
                 await self._send_progress({
-                    "type": "progress",
-                    "current": i + 1,
-                    "total": total,
-                    "percent": int(((i + 1) / total) * 100),
-                    "filename": filename,
-                    "status": "error",
-                    "detail": "Extraction echouee",
+                    "type": "progress", "current": i + 1, "total": total,
+                    "percent": int(((i + 1) / total) * 100), "filename": filename,
+                    "status": "error", "detail": "Extraction echouee",
                 })
 
-        # 4. Generer les embeddings en une seule passe (au lieu de a chaque doc)
+        # Embeddings en une seule passe a la fin
         if self.extractions:
-            await self._send_progress({
-                "type": "progress",
-                "current": total,
-                "total": total,
-                "percent": 100,
-                "filename": "",
-                "status": "processing",
-                "detail": "Indexation des extractions...",
-            })
             self.extractions.finalize_embeddings()
 
-        # 5. Construire le profil fiscal depuis TOUTES les extractions
+    async def _step_ingestion(self, files: list[Path], folder: Path) -> list[dict]:
+        """Ingestion complete (mode foreground, pour la reprise)."""
+        await self._send_now("Reprise de l'analyse des documents...")
+        await self._run_ingestion(files, folder)
+
+        # Construire le profil
         if self.extractions and self.profile:
             profile_data = self.extractions.build_profile_data()
             self.profile.merge_extraction(profile_data, "extraction_store")
             self.profile.save()
 
-        # Résumé pour l'utilisateur
         summary = self.extractions.get_summary() if self.extractions else {}
         completeness = self.profile.get_completeness() if self.profile else 0
-        profile_preview = self.profile.get_for_llm() if self.profile else "{}"
 
-        msg = f"**Ingestion terminée** : {ingested} extrait(s), {skipped} déjà traité(s), {len(errors)} erreur(s) sur {total} document(s).\n\n"
-
-        if summary.get("types"):
-            msg += "**Types de documents détectés :**\n"
-            for doc_type, count in summary["types"].items():
-                msg += f"- {doc_type} : {count}\n"
-            msg += "\n"
-
+        msg = f"**Analyse terminee** ({summary.get('nb_documents', 0)} documents)\n\n"
         if summary.get("montants_cles"):
-            msg += "**Montants clés extraits :**\n"
+            msg += "**Montants cles :**\n"
             for key, val in summary["montants_cles"].items():
-                msg += f"- {key} : {val:,.2f}€\n"
+                msg += f"- {key} : {val:,.2f} EUR\n"
             msg += "\n"
 
-        if summary.get("entites"):
-            msg += f"**Entités :** {', '.join(summary['entites'])}\n\n"
-
-        if summary.get("donnees_manquantes"):
-            msg += "**Données manquantes signalées :**\n"
-            for m in summary["donnees_manquantes"][:5]:
-                msg += f"- {m}\n"
-            msg += "\n"
-
-        if errors:
-            msg += "**Documents non exploitables :**\n"
-            for e in errors[:5]:
-                msg += f"- {e}\n"
-            msg += "\n"
-
-        msg += f"**Profil fiscal** (complétude : {completeness:.0%}) :\n\n"
-        msg += f"```json\n{profile_preview[:2000]}\n```\n\n"
-
-        # Passer à la validation
         self.state = STATE_VALIDATION
         self._persist()
 
@@ -688,6 +850,18 @@ class AgentFiscal:
         if self.state == STATE_INGESTION:
             msg += f"{already_extracted} document(s) deja analyse(s).\n\n"
             msg += "Tapez **ok** pour reprendre l'analyse des documents restants."
+
+        elif self.state == STATE_PARALLEL:
+            q_done = self.current_question_index
+            q_total = len(self.pending_questions)
+            msg += f"{already_extracted} document(s) deja analyse(s). "
+            msg += f"{q_done}/{q_total} questions repondues.\n\n"
+            # Relancer l'ingestion en arriere-plan et reprendre les questions
+            msg += "L'analyse des documents va reprendre en arriere-plan.\n"
+            if q_done < q_total:
+                msg += f"\n**Question {q_done + 1}/{q_total}** :\n{self.pending_questions[q_done]}"
+            else:
+                msg += "Tapez **ok** pour continuer."
 
         elif self.state == STATE_VALIDATION:
             msg += f"{already_extracted} document(s) analyses. Completude : {completeness:.0%}\n"
