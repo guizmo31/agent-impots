@@ -1,0 +1,15 @@
+# CODEOWNERS — Chaque PR touchant ces fichiers requiert votre review.
+# Doc : https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Par defaut, tout le repo vous appartient
+* @guizmo31
+
+# Fichiers critiques (prompts LLM, securite, donnees fiscales)
+# Toute modification requiert OBLIGATOIREMENT votre approbation
+backend/agent.py           @guizmo31
+backend/extractors.py      @guizmo31
+backend/ollama_client.py   @guizmo31
+backend/sanitizer.py       @guizmo31
+backend/fiscal_profile.py  @guizmo31
+data/                      @guizmo31
+.github/                   @guizmo31
