@@ -111,9 +111,14 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
     else:
         agent = active_agents[session_id]
 
-    # Mettre a jour le nom si fourni
-    if session_name and agent.store:
-        agent.store.set("name", session_name)
+    # Mettre a jour le nom de la session
+    if agent.store:
+        current_name = agent.store.get("name", "")
+        if session_name:
+            agent.store.set("name", session_name)
+        elif not current_name:
+            from datetime import datetime
+            agent.store.set("name", f"Declaration {datetime.now().strftime('%d/%m/%Y %H:%M')}")
 
     # Brancher le callback de progression pour envoyer en temps reel
     async def send_progress(msg: dict):

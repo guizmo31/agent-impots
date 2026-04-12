@@ -58,7 +58,7 @@ class SessionStore:
         """Initialise une nouvelle session."""
         self.data = {
             "session_id": self.session_id,
-            "name": name or f"Déclaration {datetime.now().strftime('%d/%m/%Y')}",
+            "name": name,  # Sera mis a jour par app.py quand le WebSocket envoie le nom
             "created_at": datetime.now().isoformat(),
             "updated_at": datetime.now().isoformat(),
             "state": "welcome",
@@ -210,7 +210,7 @@ def list_sessions() -> list[dict]:
 
             sessions.append({
                 "session_id": session_id,
-                "name": data.get("name", "Sans nom"),
+                "name": data.get("name") or "Sans nom",
                 "state": data.get("state", "?"),
                 "created_at": data.get("created_at", ""),
                 "updated_at": data.get("updated_at", ""),
