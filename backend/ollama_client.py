@@ -67,13 +67,13 @@ async def query_llm(
 
     async with httpx.AsyncClient(timeout=600.0) as client:
         try:
-            print(f"[LLM] Requête → {model} (temp={temperature}, max_tokens={max_tokens})")
+            print(f"[LLM] Requête -> {model} (temp={temperature}, max_tokens={max_tokens})")
             response = await client.post(f"{OLLAMA_URL}/api/generate", json=payload)
             response.raise_for_status()
             result = response.json()
             text = result.get("response", "").strip()
             tokens_used = result.get("eval_count", 0)
-            duration = result.get("total_duration", 0) / 1e9  # nanosecondes → secondes
+            duration = result.get("total_duration", 0) / 1e9  # nanosecondes -> secondes
             print(f"[LLM] Réponse reçue : {tokens_used} tokens en {duration:.1f}s")
             return text
         except httpx.ConnectError:

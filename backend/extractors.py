@@ -125,7 +125,7 @@ async def extract_structured(filename: str, content: str) -> dict | None:
         # Nettoyer les montants null
         montants = result.get("montants", {})
         result["montants"] = {k: v for k, v in montants.items() if v is not None}
-        print(f"[EXTRACT] {filename} → {result.get('type_document', '?')} | "
+        print(f"[EXTRACT] {filename} -> {result.get('type_document', '?')} | "
               f"{len(result.get('montants', {}))} montants | "
               f"confiance: {result.get('confiance', '?')}")
     else:

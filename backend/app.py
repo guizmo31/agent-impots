@@ -1,7 +1,18 @@
 """
-Agent Impôts - Backend FastAPI
+Agent Impots - Backend FastAPI
 Serveur principal orchestrant l'agent fiscal local.
 """
+import sys
+import os
+
+# Fix encodage Windows — forcer UTF-8 pour stdout/stderr (evite les crashes charmap)
+if sys.platform == "win32":
+    os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 import json
 from pathlib import Path
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect

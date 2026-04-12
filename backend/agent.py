@@ -2,10 +2,10 @@
 Agent Fiscal — Orchestration multi-étapes.
 
 Pipeline :
-  Étape 1 — INGESTION    : Doc brut → Extraction structurée universelle → RAG local extractions → Profil JSON
-  Étape 2 — VALIDATION   : Profil analysé → "il me manque X, Y, Z" → questions ciblées
-  Étape 3 — CALCUL       : RAG fiscal + profil JSON (seule source de vérité) → cases 2042
-  Étape 4 — VÉRIFICATION : Cross-check cohérence → rapport final
+  Étape 1 — INGESTION    : Doc brut -> Extraction structurée universelle -> RAG local extractions -> Profil JSON
+  Étape 2 — VALIDATION   : Profil analysé -> "il me manque X, Y, Z" -> questions ciblées
+  Étape 3 — CALCUL       : RAG fiscal + profil JSON (seule source de vérité) -> cases 2042
+  Étape 4 — VÉRIFICATION : Cross-check cohérence -> rapport final
 
 Les PDFs ne sont jamais relus après l'étape 1.
 Le profil JSON est la SEULE source de vérité pour le calcul.
@@ -168,11 +168,11 @@ class AgentFiscal:
         ]
 
     # ==================================================================
-    # Étape 1 : INGESTION — extraction structurée → RAG local → profil
+    # Étape 1 : INGESTION — extraction structurée -> RAG local -> profil
     # ==================================================================
 
     async def _step_ingestion(self, files: list[Path], folder: Path) -> list[dict]:
-        """Pipeline : Document → Extraction structurée → ExtractionStore (RAG) → FiscalProfile."""
+        """Pipeline : Document -> Extraction structurée -> ExtractionStore (RAG) -> FiscalProfile."""
         total = len(files)
         ingested = 0
         skipped = 0
@@ -186,7 +186,7 @@ class AgentFiscal:
             print(f"[INGEST] [{i+1}/{total}] {filename}")
 
             if filename in already_done:
-                print(f"[INGEST]   → Déjà extrait, skip")
+                print(f"[INGEST]   -> Déjà extrait, skip")
                 skipped += 1
                 continue
 
@@ -204,10 +204,10 @@ class AgentFiscal:
                 self.extractions.add(extraction)
                 ingested += 1
             elif extraction:
-                # Extraction ok mais pas de montants → quand même stocker pour contexte
+                # Extraction ok mais pas de montants -> quand même stocker pour contexte
                 self.extractions.add(extraction)
                 ingested += 1
-                print(f"[INGEST]   → Pas de montants, mais contexte conservé")
+                print(f"[INGEST]   -> Pas de montants, mais contexte conservé")
             else:
                 errors.append(f"{filename} : extraction échouée")
 
@@ -302,7 +302,7 @@ class AgentFiscal:
         self._persist()
 
         if not self.pending_questions:
-            # Profil complet → passer au calcul
+            # Profil complet -> passer au calcul
             self.state = STATE_CALCUL
             self._persist()
             return [
@@ -336,7 +336,7 @@ class AgentFiscal:
             idx = self.current_question_index
             return [self._msg(f"**Question {idx + 1}/{total}** :\n{self.pending_questions[idx]}")]
 
-        # Toutes les questions répondues → calcul
+        # Toutes les questions répondues -> calcul
         self.state = STATE_CALCUL
         self._persist()
 
@@ -362,7 +362,7 @@ class AgentFiscal:
         return _parse_json(response)
 
     # ==================================================================
-    # Étape 3 : CALCUL — RAG + profil JSON → cases 2042
+    # Étape 3 : CALCUL — RAG + profil JSON -> cases 2042
     # ==================================================================
 
     async def _step_calcul(self) -> list[dict]:

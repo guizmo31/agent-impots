@@ -2,7 +2,7 @@
 Store des extractions structurées — RAG local sur les données du contribuable.
 
 Pipeline :
-  Document brut → Extraction structurée universelle → Indexé dans un RAG local
+  Document brut -> Extraction structurée universelle -> Indexé dans un RAG local
 
 L'extraction suit un format UNIQUE quel que soit le document :
   {
