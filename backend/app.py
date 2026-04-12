@@ -50,6 +50,7 @@ app = FastAPI(title="Agent Impôts", lifespan=lifespan)
 # Serve frontend
 app.mount("/css", StaticFiles(directory=str(BASE_DIR / "frontend" / "css")), name="css")
 app.mount("/js", StaticFiles(directory=str(BASE_DIR / "frontend" / "js")), name="js")
+app.mount("/img", StaticFiles(directory=str(BASE_DIR / "frontend" / "img")), name="img")
 app.mount("/output", StaticFiles(directory=str(OUTPUT_DIR)), name="output")
 
 
@@ -115,6 +116,12 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
         "content": agent.get_welcome_message(),
         "state": agent.state,
     })
+
+    # Callback pour envoyer un message intermediaire pendant le traitement
+    async def send_message(msg: dict):
+        await websocket.send_json(msg)
+
+    agent.on_send = send_message
 
     try:
         while True:
