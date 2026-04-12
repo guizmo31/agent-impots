@@ -26,9 +26,11 @@ from extraction_store import ExtractionStore
 from extractors import extract_structured, extract_batch
 
 SYSTEM_PROMPT = (
-    "Tu es un assistant fiscal expert en déclaration d'impôts française. "
-    "Tu travailles UNIQUEMENT avec le profil fiscal JSON fourni — jamais avec des documents bruts. "
-    "Tu réponds en JSON quand demandé. Tu ne devines pas les informations manquantes."
+    "Tu es un assistant fiscal expert en declaration d'impots francaise. "
+    "IMPORTANT : Tu reponds TOUJOURS en francais. Jamais en anglais. "
+    "Tu travailles UNIQUEMENT avec le profil fiscal JSON fourni. "
+    "Tu reponds en JSON quand demande. Tu ne devines pas les informations manquantes. "
+    "Toutes tes questions, explications et remarques sont en francais."
 )
 
 # Etats du pipeline
@@ -667,19 +669,21 @@ class AgentFiscal:
         rag_context = self.rag.retrieve("parts fiscales situation familiale enfants charges déductibles", top_k=5, max_tokens=2000)
 
         prompt = (
-            f"## Référentiel fiscal\n{rag_context}\n\n"
+            f"## Referentiel fiscal\n{rag_context}\n\n"
             f"## Profil fiscal actuel du contribuable\n```json\n{profile_json}\n```\n\n"
             "## Mission\n\n"
+            "IMPORTANT : Reponds UNIQUEMENT en francais.\n\n"
             "Analyse ce profil fiscal et identifie TOUTES les informations manquantes "
-            "pour pouvoir calculer l'impôt. Génère des questions PRÉCISES pour les obtenir.\n\n"
-            "Règles :\n"
-            "- Ne demande PAS ce qui est déjà dans le profil\n"
-            "- Priorise : situation familiale, nb enfants, régime foncier (si foncier détecté), crédits d'impôt\n"
-            "- Maximum 10 questions, classées par importance\n\n"
-            "Réponds en JSON :\n"
+            "pour pouvoir calculer l'impot. Genere des questions PRECISES pour les obtenir.\n\n"
+            "Regles :\n"
+            "- Toutes les questions doivent etre en FRANCAIS\n"
+            "- Ne demande PAS ce qui est deja dans le profil\n"
+            "- Priorise : situation familiale, nb enfants, regime foncier (si foncier detecte), credits d'impot\n"
+            "- Maximum 10 questions, classees par importance\n\n"
+            "Reponds en JSON :\n"
             "```json\n"
             '{"missing": ["situation familiale", "nombre d\'enfants"], '
-            '"questions": ["Quelle est votre situation familiale au 31/12/2025 ?", "..."]}\n'
+            '"questions": ["Quelle est votre situation familiale au 31/12/2025 ?", "Combien d\'enfants avez-vous a charge ?"]}\n'
             "```"
         )
 
@@ -753,8 +757,9 @@ class AgentFiscal:
         print(f"[ANSWER] Reponse complexe, appel LLM...")
         prompt = (
             f"Question : {question}\n"
-            f"Reponse : {answer}\n\n"
-            "Transforme en JSON partiel pour un profil fiscal.\n"
+            f"Reponse de l'utilisateur : {answer}\n\n"
+            "Transforme cette reponse en JSON partiel pour un profil fiscal francais.\n"
+            "Les valeurs texte doivent etre en francais.\n"
             "Cles possibles : foyer.situation, foyer.nb_enfants_mineurs, foyer.parent_isole, "
             "revenus.foncier_nu, revenus.foncier_meuble, charges_deductibles, reductions_credits\n\n"
             '```json\n{"foyer": {"situation": "marie", "nb_enfants_mineurs": 2}}\n```'
@@ -860,7 +865,7 @@ class AgentFiscal:
             "C'est ta SEULE source de données. Tous les montants viennent de ce profil.\n\n"
             f"```json\n{profile_json}\n```\n\n"
             "---\n\n"
-            "# INSTRUCTIONS\n\n"
+            "# INSTRUCTIONS (reponds en FRANCAIS uniquement)\n\n"
             "1. Pour chaque revenu/charge du profil, identifie la case 2042 correspondante\n"
             "2. Calcule le nombre de parts fiscales\n"
             "3. Applique le barème progressif avec quotient familial\n"

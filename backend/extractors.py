@@ -28,11 +28,12 @@ from sanitizer import sanitize_document_content
 
 
 EXTRACTION_SYSTEM = (
-    "Tu es un extracteur de données fiscales. "
-    "Tu analyses un document et tu produis une extraction structurée au format JSON. "
-    "Tu ne devines JAMAIS un montant — si tu ne le trouves pas, mets null. "
-    "Tu signales toujours les données manquantes ou ambiguës. "
-    "Réponds UNIQUEMENT en JSON valide."
+    "Tu es un extracteur de donnees fiscales francaises. "
+    "Tu reponds TOUJOURS en francais. Jamais en anglais. "
+    "Tu analyses un document et tu produis une extraction structuree au format JSON. "
+    "Tu ne devines JAMAIS un montant -- si tu ne le trouves pas, mets null. "
+    "Tu signales toujours les donnees manquantes ou ambigues. "
+    "Reponds UNIQUEMENT en JSON valide. Les champs texte sont en francais."
 )
 
 EXTRACTION_PROMPT_TEMPLATE = """## Document à analyser
