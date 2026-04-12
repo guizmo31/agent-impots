@@ -53,8 +53,9 @@ class AgentFiscal:
         self.profile = FiscalProfile(session_id) if session_id else None
         self.extractions = ExtractionStore(session_id) if session_id else None
 
-        # Callback pour envoyer la progression en temps réel (set par app.py)
-        self.on_progress = None  # async def(msg: dict) -> None
+        # Callbacks pour envoyer des messages en temps reel (set par app.py)
+        self.on_progress = None  # async def(msg: dict) -> None — progression ingestion
+        self.on_send = None      # async def(msg: dict) -> None — messages intermediaires
 
         # État courant
         self._restore_state()
@@ -113,7 +114,7 @@ class AgentFiscal:
             responses = await self._step_start(user_message)
         elif self.state == STATE_INGESTION:
             # L'ingestion est automatique, l'utilisateur attend
-            responses = [self._msg("L'ingestion des documents est en cours, veuillez patienter...")]
+            responses = [self._msg("L'analyse des documents est en cours, veuillez patienter...")]
         elif self.state == STATE_VALIDATION:
             responses = await self._step_validation_answer(user_message)
         elif self.state == STATE_CALCUL:
@@ -158,29 +159,47 @@ class AgentFiscal:
             return [self._msg(f"Aucun document exploitable dans `{folder_path}`.\n\nFormats : PDF, PNG, JPG, XLSX, CSV, DOCX, TXT.")]
 
         file_list = "\n".join(f"  - `{f.relative_to(folder)}`" for f in files[:30])
+        if len(files) > 30:
+            file_list += f"\n  - ... et {len(files) - 30} autre(s)"
         nb_total = len(files)
 
         self.state = STATE_INGESTION
         self._persist()
 
-        return [
-            self._msg(f"**{nb_total} document(s)** trouvé(s) :\n\n{file_list}\n\n"
-                      "Je vais analyser chaque document un par un pour construire votre profil fiscal..."),
-            {"type": "status", "content": "Ingestion des documents...", "state": STATE_INGESTION},
-            *(await self._step_ingestion(files, folder)),
-        ]
+        # Envoyer la liste des fichiers IMMEDIATEMENT (avant l'ingestion)
+        await self._send_now(
+            f"**{nb_total} document(s)** trouves :\n\n{file_list}\n\n"
+            "Je vais analyser chaque document un par un pour construire votre profil fiscal..."
+        )
+
+        # L'ingestion envoie la progression en temps reel via on_progress
+        # et retourne le resume final + les messages de validation
+        return await self._step_ingestion(files, folder)
 
     # ==================================================================
     # Étape 1 : INGESTION — extraction structurée -> RAG local -> profil
     # ==================================================================
 
     async def _send_progress(self, msg: dict):
-        """Envoie un message de progression en temps réel via le WebSocket."""
+        """Envoie un message de progression en temps reel via le WebSocket."""
         if self.on_progress:
             try:
                 await self.on_progress(msg)
             except Exception:
-                pass  # Le WebSocket peut être fermé
+                pass
+
+    async def _send_now(self, content: str, msg_type: str = "assistant"):
+        """Envoie un message immediatement au client (sans attendre la fin du traitement)."""
+        msg = {"type": msg_type, "content": content, "state": self.state}
+        if self.on_send:
+            try:
+                await self.on_send(msg)
+                # Aussi ajouter a l'historique
+                self.conversation_history.append({"role": "assistant", "content": content})
+                if self.store:
+                    self.store.add_message("assistant", content)
+            except Exception:
+                pass
 
     async def _step_ingestion(self, files: list[Path], folder: Path) -> list[dict]:
         """Pipeline : Document -> Extraction structurée -> ExtractionStore (RAG) -> FiscalProfile."""

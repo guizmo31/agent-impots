@@ -143,14 +143,22 @@ function setStatus(state, text) {
 
 // --- Messages ---
 
+let ingestionInProgress = false;
+
 function handleMessage(data) {
     switch (data.type) {
         case 'progress':
+            ingestionInProgress = true;
             updateProgressBar(data);
             return; // Ne pas toucher au typing indicator ni au input
         case 'assistant':
             removeTypingIndicator();
-            removeProgressBar();
+            if (ingestionInProgress) {
+                // Pendant l'ingestion, les messages assistant ne suppriment PAS la barre
+                // Ils s'affichent au-dessus (liste de fichiers) ou en dessous (resume)
+                finalizeProgressBar();
+                ingestionInProgress = false;
+            }
             isWaiting = false;
             enableInput();
             addAssistantMessage(data.content);
@@ -160,16 +168,19 @@ function handleMessage(data) {
             break;
         case 'report':
             removeTypingIndicator();
-            removeProgressBar();
+            finalizeProgressBar();
+            ingestionInProgress = false;
             isWaiting = false;
             enableInput();
             addReportMessage(data.content, data.report_path);
             break;
         default:
+            // Ignorer les messages sans type connu qui n'ont pas de content
+            if (!data.content) return;
             removeTypingIndicator();
             isWaiting = false;
             enableInput();
-            addAssistantMessage(data.content || JSON.stringify(data));
+            addAssistantMessage(data.content);
     }
 }
 
@@ -182,7 +193,7 @@ function updateProgressBar(data) {
         container.className = 'progress-container';
         container.innerHTML = `
             <div class="progress-header">
-                <span class="progress-title">Ingestion des documents</span>
+                <span class="progress-title">Analyse des documents</span>
                 <span class="progress-counter" id="progress-counter">0/0</span>
             </div>
             <div class="progress-bar-track">
@@ -230,14 +241,18 @@ function updateProgressBar(data) {
     scrollToBottom();
 }
 
-function removeProgressBar() {
+function finalizeProgressBar() {
     const container = document.getElementById('progress-container');
     if (container) {
-        // Mettre la barre a 100% avant de la laisser
+        // Mettre la barre a 100% et marquer comme termine
         const fill = document.getElementById('progress-bar-fill');
         if (fill) fill.style.width = '100%';
         const counter = document.getElementById('progress-counter');
-        if (counter) counter.textContent += ' - Termine !';
+        if (counter && !counter.textContent.includes('Termine')) {
+            counter.textContent += ' - Termine !';
+        }
+        const current = document.getElementById('progress-current');
+        if (current) current.textContent = '';
     }
 }
 

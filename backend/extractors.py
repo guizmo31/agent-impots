@@ -24,6 +24,7 @@ Un seul prompt. Un seul format. Fini les extracteurs ad-hoc.
 import json
 import re
 from ollama_client import query_llm
+from sanitizer import sanitize_document_content
 
 
 EXTRACTION_SYSTEM = (
@@ -98,9 +99,13 @@ async def extract_structured(filename: str, content: str) -> dict | None:
     Returns:
         Un dict au format universel, ou None si l'extraction échoue.
     """
-    # Adapter la taille du contenu envoyé
+    # Sanitizer anti-prompt-injection AVANT envoi au LLM
+    content, security_warnings = sanitize_document_content(content, filename)
+    for w in security_warnings:
+        print(w)
+
+    # Adapter la taille du contenu envoye
     if len(content) > 6000:
-        # Garder début (en-tête, identifiants) + fin (cumuls, totaux)
         head = content[:3500]
         tail = content[-2000:]
         content_for_llm = f"{head}\n\n[... milieu du document omis ...]\n\n{tail}"
