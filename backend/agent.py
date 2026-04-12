@@ -297,7 +297,20 @@ class AgentFiscal:
                     "detail": "Extraction echouee",
                 })
 
-        # 4. Construire le profil fiscal depuis TOUTES les extractions
+        # 4. Generer les embeddings en une seule passe (au lieu de a chaque doc)
+        if self.extractions:
+            await self._send_progress({
+                "type": "progress",
+                "current": total,
+                "total": total,
+                "percent": 100,
+                "filename": "",
+                "status": "processing",
+                "detail": "Indexation des extractions...",
+            })
+            self.extractions.finalize_embeddings()
+
+        # 5. Construire le profil fiscal depuis TOUTES les extractions
         if self.extractions and self.profile:
             profile_data = self.extractions.build_profile_data()
             self.profile.merge_extraction(profile_data, "extraction_store")

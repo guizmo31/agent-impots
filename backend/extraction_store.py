@@ -87,44 +87,49 @@ class ExtractionStore:
     # Ajout d'une extraction
     # ------------------------------------------------------------------
 
-    def add(self, extraction: dict):
-        """Ajoute une extraction structurée et génère son embedding."""
-        # Éviter les doublons (même doc_id)
+    def add(self, extraction: dict, generate_embedding: bool = False):
+        """Ajoute une extraction structuree. Embedding genere seulement si demande.
+
+        Pendant l'ingestion, on appelle add() sans embedding (rapide),
+        puis finalize_embeddings() une seule fois a la fin.
+        """
         doc_id = extraction.get("doc_id", "")
-        self.extractions = [e for e in self.extractions if e.get("doc_id") != doc_id]
+        # Retirer le doublon eventuel + son embedding
+        new_extractions = []
+        new_embeddings = []
+        for j, e in enumerate(self.extractions):
+            if e.get("doc_id") != doc_id:
+                new_extractions.append(e)
+                if j < len(self.embeddings):
+                    new_embeddings.append(self.embeddings[j])
+        self.extractions = new_extractions
+        self.embeddings = new_embeddings
 
-        # Générer le texte à indexer pour le RAG
-        index_text = self._extraction_to_text(extraction)
-        extraction["_index_text"] = index_text
-
+        # Ajouter la nouvelle extraction
+        extraction["_index_text"] = self._extraction_to_text(extraction)
         self.extractions.append(extraction)
 
-        # Générer l'embedding
-        embedding = self._get_embedding(index_text)
-        # Aligner les embeddings avec les extractions
-        # Reconstruire la liste complète
-        self.embeddings = []
-        for ext in self.extractions:
-            txt = ext.get("_index_text", self._extraction_to_text(ext))
-            emb = self._get_embedding(txt)
+        if generate_embedding:
+            emb = self._get_embedding(extraction["_index_text"])
             self.embeddings.append(emb)
+        else:
+            self.embeddings.append([])  # Placeholder, sera rempli par finalize
 
-        self.save()
+        # PAS de save() ici — on sauvegarde en batch dans finalize ou manuellement
 
-    def add_batch(self, extractions: list[dict]):
-        """Ajoute plusieurs extractions d'un coup (plus efficace pour les embeddings)."""
-        for ext in extractions:
-            doc_id = ext.get("doc_id", "")
-            self.extractions = [e for e in self.extractions if e.get("doc_id") != doc_id]
-            ext["_index_text"] = self._extraction_to_text(ext)
-            self.extractions.append(ext)
-
-        # Regénérer tous les embeddings en batch
-        self.embeddings = []
-        for ext in self.extractions:
-            emb = self._get_embedding(ext.get("_index_text", ""))
-            self.embeddings.append(emb)
-
+    def finalize_embeddings(self):
+        """Genere les embeddings manquants en une seule passe, puis sauvegarde.
+        A appeler UNE SEULE FOIS apres l'ingestion de tous les documents."""
+        generated = 0
+        for i, ext in enumerate(self.extractions):
+            if i >= len(self.embeddings) or not self.embeddings[i]:
+                emb = self._get_embedding(ext.get("_index_text", ""))
+                if i < len(self.embeddings):
+                    self.embeddings[i] = emb
+                else:
+                    self.embeddings.append(emb)
+                generated += 1
+        print(f"[STORE] {generated} embeddings generes pour {len(self.extractions)} extractions")
         self.save()
 
     # ------------------------------------------------------------------
