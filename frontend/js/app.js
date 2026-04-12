@@ -144,22 +144,100 @@ function setStatus(state, text) {
 // --- Messages ---
 
 function handleMessage(data) {
-    removeTypingIndicator();
-    isWaiting = false;
-    enableInput();
-
     switch (data.type) {
+        case 'progress':
+            updateProgressBar(data);
+            return; // Ne pas toucher au typing indicator ni au input
         case 'assistant':
+            removeTypingIndicator();
+            removeProgressBar();
+            isWaiting = false;
+            enableInput();
             addAssistantMessage(data.content);
             break;
         case 'status':
             addStatusMessage(data.content);
             break;
         case 'report':
+            removeTypingIndicator();
+            removeProgressBar();
+            isWaiting = false;
+            enableInput();
             addReportMessage(data.content, data.report_path);
             break;
         default:
+            removeTypingIndicator();
+            isWaiting = false;
+            enableInput();
             addAssistantMessage(data.content || JSON.stringify(data));
+    }
+}
+
+function updateProgressBar(data) {
+    let container = document.getElementById('progress-container');
+    if (!container) {
+        // Creer le bloc de progression
+        container = document.createElement('div');
+        container.id = 'progress-container';
+        container.className = 'progress-container';
+        container.innerHTML = `
+            <div class="progress-header">
+                <span class="progress-title">Ingestion des documents</span>
+                <span class="progress-counter" id="progress-counter">0/0</span>
+            </div>
+            <div class="progress-bar-track">
+                <div class="progress-bar-fill" id="progress-bar-fill"></div>
+            </div>
+            <div class="progress-current" id="progress-current"></div>
+            <div class="progress-log" id="progress-log"></div>
+        `;
+        chatMessages.appendChild(container);
+    }
+
+    const pct = data.percent || 0;
+    const current = data.current || 0;
+    const total = data.total || 0;
+    const filename = data.filename || '';
+    const status = data.status || '';
+    const detail = data.detail || '';
+
+    // Mettre a jour la barre
+    document.getElementById('progress-counter').textContent = `${current}/${total} (${pct}%)`;
+    document.getElementById('progress-bar-fill').style.width = `${pct}%`;
+
+    // Document en cours
+    if (status === 'processing') {
+        document.getElementById('progress-current').innerHTML =
+            `<span class="spinner"></span> <strong>${escapeHtml(filename)}</strong>`;
+    } else {
+        document.getElementById('progress-current').textContent = '';
+    }
+
+    // Log des documents traites
+    const log = document.getElementById('progress-log');
+    const statusIcon = status === 'ok' ? '&#10003;' : status === 'skip' ? '&#8631;' : '&#10007;';
+    const statusClass = status === 'ok' ? 'log-ok' : status === 'skip' ? 'log-skip' : 'log-error';
+
+    if (status !== 'processing') {
+        const entry = document.createElement('div');
+        entry.className = `progress-log-entry ${statusClass}`;
+        entry.innerHTML = `<span class="log-icon">${statusIcon}</span> ${escapeHtml(filename)} <span class="log-detail">${escapeHtml(detail)}</span>`;
+        log.appendChild(entry);
+        // Garder le scroll en bas du log
+        log.scrollTop = log.scrollHeight;
+    }
+
+    scrollToBottom();
+}
+
+function removeProgressBar() {
+    const container = document.getElementById('progress-container');
+    if (container) {
+        // Mettre la barre a 100% avant de la laisser
+        const fill = document.getElementById('progress-bar-fill');
+        if (fill) fill.style.width = '100%';
+        const counter = document.getElementById('progress-counter');
+        if (counter) counter.textContent += ' - Termine !';
     }
 }
 

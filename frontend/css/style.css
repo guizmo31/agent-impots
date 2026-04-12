@@ -356,6 +356,112 @@ textarea:disabled {
     margin-top: 8px;
 }
 
+/* Progress Bar (ingestion) */
+.progress-container {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px;
+    margin: 8px 0;
+    animation: fadeIn 0.3s ease;
+}
+
+.progress-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.progress-title {
+    font-weight: 600;
+    color: var(--primary);
+    font-size: 15px;
+}
+
+.progress-counter {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--primary-light);
+}
+
+.progress-bar-track {
+    width: 100%;
+    height: 10px;
+    background: #e8ecf1;
+    border-radius: 5px;
+    overflow: hidden;
+    margin-bottom: 10px;
+}
+
+.progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--primary-light), var(--success));
+    border-radius: 5px;
+    transition: width 0.4s ease;
+    width: 0%;
+}
+
+.progress-current {
+    font-size: 14px;
+    color: var(--text);
+    margin-bottom: 8px;
+    min-height: 20px;
+}
+
+.progress-current .spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--border);
+    border-top-color: var(--primary-light);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-right: 6px;
+    vertical-align: middle;
+}
+
+.progress-log {
+    max-height: 200px;
+    overflow-y: auto;
+    font-size: 13px;
+    border-top: 1px solid var(--border);
+    padding-top: 8px;
+}
+
+.progress-log-entry {
+    padding: 3px 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.log-icon {
+    width: 18px;
+    text-align: center;
+    flex-shrink: 0;
+    font-size: 14px;
+}
+
+.log-ok .log-icon { color: var(--success); }
+.log-skip .log-icon { color: var(--text-light); }
+.log-error .log-icon { color: var(--error); }
+
+.log-ok { color: var(--text); }
+.log-skip { color: var(--text-light); }
+.log-error { color: var(--error); }
+
+.log-detail {
+    color: var(--text-light);
+    font-size: 12px;
+    margin-left: auto;
+    text-align: right;
+    max-width: 50%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 /* Session Picker */
 .session-picker {
     flex: 1;

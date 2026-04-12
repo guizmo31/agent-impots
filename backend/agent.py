@@ -53,6 +53,9 @@ class AgentFiscal:
         self.profile = FiscalProfile(session_id) if session_id else None
         self.extractions = ExtractionStore(session_id) if session_id else None
 
+        # Callback pour envoyer la progression en temps réel (set par app.py)
+        self.on_progress = None  # async def(msg: dict) -> None
+
         # État courant
         self._restore_state()
 
@@ -171,6 +174,14 @@ class AgentFiscal:
     # Étape 1 : INGESTION — extraction structurée -> RAG local -> profil
     # ==================================================================
 
+    async def _send_progress(self, msg: dict):
+        """Envoie un message de progression en temps réel via le WebSocket."""
+        if self.on_progress:
+            try:
+                await self.on_progress(msg)
+            except Exception:
+                pass  # Le WebSocket peut être fermé
+
     async def _step_ingestion(self, files: list[Path], folder: Path) -> list[dict]:
         """Pipeline : Document -> Extraction structurée -> ExtractionStore (RAG) -> FiscalProfile."""
         total = len(files)
@@ -183,33 +194,89 @@ class AgentFiscal:
 
         for i, f in enumerate(files):
             filename = f.name
+            pct = int((i / total) * 100)
             print(f"[INGEST] [{i+1}/{total}] {filename}")
 
             if filename in already_done:
-                print(f"[INGEST]   -> Déjà extrait, skip")
+                print(f"[INGEST]   -> Deja extrait, skip")
                 skipped += 1
+                await self._send_progress({
+                    "type": "progress",
+                    "current": i + 1,
+                    "total": total,
+                    "percent": pct,
+                    "filename": filename,
+                    "status": "skip",
+                    "detail": "Deja traite",
+                })
                 continue
+
+            # Notifier le début du traitement de ce document
+            await self._send_progress({
+                "type": "progress",
+                "current": i + 1,
+                "total": total,
+                "percent": pct,
+                "filename": filename,
+                "status": "processing",
+                "detail": "Extraction en cours...",
+            })
 
             # 1. Parser le document brut
             doc_data = self.parser.parse(str(f))
             if not doc_data or not doc_data.get("content"):
                 errors.append(f"{filename} : contenu non extractible")
+                await self._send_progress({
+                    "type": "progress",
+                    "current": i + 1,
+                    "total": total,
+                    "percent": pct,
+                    "filename": filename,
+                    "status": "error",
+                    "detail": "Contenu non extractible",
+                })
                 continue
 
             # 2. Extraction structurée universelle (1 appel LLM ciblé)
             extraction = await extract_structured(filename, doc_data["content"])
 
             if extraction and extraction.get("montants"):
-                # 3. Stocker dans le ExtractionStore (avec embedding pour RAG)
                 self.extractions.add(extraction)
                 ingested += 1
+                doc_type = extraction.get("type_document", "?")
+                montants_keys = ", ".join(extraction.get("montants", {}).keys())
+                await self._send_progress({
+                    "type": "progress",
+                    "current": i + 1,
+                    "total": total,
+                    "percent": int(((i + 1) / total) * 100),
+                    "filename": filename,
+                    "status": "ok",
+                    "detail": f"{doc_type} | {montants_keys}",
+                })
             elif extraction:
-                # Extraction ok mais pas de montants -> quand même stocker pour contexte
                 self.extractions.add(extraction)
                 ingested += 1
-                print(f"[INGEST]   -> Pas de montants, mais contexte conservé")
+                await self._send_progress({
+                    "type": "progress",
+                    "current": i + 1,
+                    "total": total,
+                    "percent": int(((i + 1) / total) * 100),
+                    "filename": filename,
+                    "status": "ok",
+                    "detail": f"{extraction.get('type_document', '?')} (pas de montants)",
+                })
             else:
-                errors.append(f"{filename} : extraction échouée")
+                errors.append(f"{filename} : extraction echouee")
+                await self._send_progress({
+                    "type": "progress",
+                    "current": i + 1,
+                    "total": total,
+                    "percent": int(((i + 1) / total) * 100),
+                    "filename": filename,
+                    "status": "error",
+                    "detail": "Extraction echouee",
+                })
 
         # 4. Construire le profil fiscal depuis TOUTES les extractions
         if self.extractions and self.profile:

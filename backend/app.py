@@ -103,6 +103,12 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
     else:
         agent = active_agents[session_id]
 
+    # Brancher le callback de progression pour envoyer en temps reel
+    async def send_progress(msg: dict):
+        await websocket.send_json(msg)
+
+    agent.on_progress = send_progress
+
     # Envoyer le message de bienvenue (ou de reprise)
     await websocket.send_json({
         "type": "assistant",
