@@ -87,11 +87,12 @@ class ExtractionStore:
     # Ajout d'une extraction
     # ------------------------------------------------------------------
 
-    def add(self, extraction: dict, generate_embedding: bool = False):
-        """Ajoute une extraction structuree. Embedding genere seulement si demande.
+    def add(self, extraction: dict):
+        """Ajoute une extraction structuree et sauvegarde sur disque immediatement.
 
-        Pendant l'ingestion, on appelle add() sans embedding (rapide),
-        puis finalize_embeddings() une seule fois a la fin.
+        L'embedding n'est PAS genere ici (trop lent). Il sera genere en batch
+        par finalize_embeddings() une fois l'ingestion terminee.
+        Mais le JSON est sauvegarde a chaque document pour survivre a un crash.
         """
         doc_id = extraction.get("doc_id", "")
         # Retirer le doublon eventuel + son embedding
@@ -108,14 +109,10 @@ class ExtractionStore:
         # Ajouter la nouvelle extraction
         extraction["_index_text"] = self._extraction_to_text(extraction)
         self.extractions.append(extraction)
+        self.embeddings.append([])  # Placeholder, sera rempli par finalize
 
-        if generate_embedding:
-            emb = self._get_embedding(extraction["_index_text"])
-            self.embeddings.append(emb)
-        else:
-            self.embeddings.append([])  # Placeholder, sera rempli par finalize
-
-        # PAS de save() ici — on sauvegarde en batch dans finalize ou manuellement
+        # Sauvegarder sur disque immediatement (survit a un crash/kill)
+        self.save()
 
     def finalize_embeddings(self):
         """Genere les embeddings manquants en une seule passe, puis sauvegarde.

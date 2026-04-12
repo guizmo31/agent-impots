@@ -113,8 +113,8 @@ class AgentFiscal:
         if self.state == STATE_WELCOME:
             responses = await self._step_start(user_message)
         elif self.state == STATE_INGESTION:
-            # L'ingestion est automatique, l'utilisateur attend
-            responses = [self._msg("L'analyse des documents est en cours, veuillez patienter...")]
+            # Reprise d'ingestion interrompue : l'utilisateur tape n'importe quoi pour relancer
+            responses = await self._resume_ingestion()
         elif self.state == STATE_VALIDATION:
             responses = await self._step_validation_answer(user_message)
         elif self.state == STATE_CALCUL:
@@ -176,8 +176,35 @@ class AgentFiscal:
         # et retourne le resume final + les messages de validation
         return await self._step_ingestion(files, folder)
 
+    async def _resume_ingestion(self) -> list[dict]:
+        """Reprend une ingestion interrompue (crash, kill, fermeture navigateur)."""
+        if not self.documents_path:
+            self.state = STATE_WELCOME
+            self._persist()
+            return [self._msg("Session corrompue. Veuillez indiquer le chemin du dossier de documents.")]
+
+        folder = Path(self.documents_path)
+        if not folder.exists():
+            self.state = STATE_WELCOME
+            self._persist()
+            return [self._msg(f"Le dossier `{self.documents_path}` n'existe plus. Indiquez un nouveau chemin.")]
+
+        supported_ext = {".pdf", ".png", ".jpg", ".jpeg", ".tiff", ".bmp", ".xlsx", ".xls", ".csv", ".docx", ".txt"}
+        files = [f for f in folder.rglob("*") if f.is_file() and f.suffix.lower() in supported_ext]
+
+        already_done = {e.get("doc_id") for e in self.extractions.get_all()} if self.extractions else set()
+        remaining = len(files) - len(already_done)
+
+        await self._send_now(
+            f"**Reprise de l'analyse** : {len(already_done)} document(s) deja traite(s), "
+            f"{remaining} restant(s) sur {len(files)}.\n\n"
+            "L'analyse reprend..."
+        )
+
+        return await self._step_ingestion(files, folder)
+
     # ==================================================================
-    # Étape 1 : INGESTION — extraction structurée -> RAG local -> profil
+    # Etape 1 : INGESTION -- extraction structuree -> RAG local -> profil
     # ==================================================================
 
     async def _send_progress(self, msg: dict):
@@ -609,26 +636,31 @@ class AgentFiscal:
     def _get_resume_message(self) -> str:
         """Message de reprise de session."""
         completeness = self.profile.get_completeness()
-        profile_preview = self.profile.get_for_llm()
-        docs_count = len(self.profile.data.get("documents_sources", []))
+        already_extracted = len(self.extractions.get_all()) if self.extractions else 0
 
-        msg = f"**Session reprise** (complétude : {completeness:.0%})\n\n"
+        msg = "**Session reprise**\n\n"
 
-        if docs_count:
-            msg += f"{docs_count} document(s) déjà ingéré(s).\n"
+        if self.state == STATE_INGESTION:
+            msg += f"{already_extracted} document(s) deja analyse(s).\n\n"
+            msg += "Tapez **ok** pour reprendre l'analyse des documents restants."
 
-        if self.state == STATE_VALIDATION:
+        elif self.state == STATE_VALIDATION:
+            msg += f"{already_extracted} document(s) analyses. Completude : {completeness:.0%}\n"
             q_done = self.current_question_index
             q_total = len(self.pending_questions)
-            msg += f"{q_done}/{q_total} questions répondues.\n\n"
+            msg += f"{q_done}/{q_total} questions repondues.\n\n"
             if self.current_question_index < len(self.pending_questions):
                 msg += f"**Question {q_done + 1}/{q_total}** :\n{self.pending_questions[q_done]}"
+
         elif self.state == STATE_CALCUL:
+            msg += f"{already_extracted} document(s) analyses. Completude : {completeness:.0%}\n\n"
             msg += "Profil complet. Tapez **ok** pour lancer le calcul."
+
         elif self.state == STATE_DONE:
-            msg += "Le rapport a déjà été généré. Consultez `output/`."
+            msg += "Le rapport a deja ete genere. Consultez `output/`."
+
         else:
-            msg += f"État : {self.state}"
+            msg += f"Etat : {self.state}"
 
         return msg
 
