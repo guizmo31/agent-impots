@@ -287,23 +287,45 @@ html, body {
     to { transform: rotate(360deg); }
 }
 
-/* Report link */
+/* Report links */
+.report-links {
+    display: flex;
+    gap: 10px;
+    margin-top: 12px;
+    flex-wrap: wrap;
+}
+
 .report-link {
     display: inline-flex;
     align-items: center;
     gap: 8px;
     padding: 10px 20px;
-    background: var(--success);
     color: white;
     text-decoration: none;
     border-radius: 8px;
     font-weight: 600;
-    margin-top: 12px;
-    transition: background 0.2s;
+    font-size: 14px;
+    transition: background 0.2s, transform 0.1s;
 }
 
 .report-link:hover {
-    background: #219a52;
+    transform: scale(1.03);
+}
+
+.report-link-pdf {
+    background: #c0392b;
+}
+
+.report-link-pdf:hover {
+    background: #a93226;
+}
+
+.report-link-html {
+    background: var(--primary-light);
+}
+
+.report-link-html:hover {
+    background: var(--primary);
 }
 
 /* Input Area */

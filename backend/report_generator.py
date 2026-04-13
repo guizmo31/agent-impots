@@ -1,5 +1,5 @@
 """
-Générateur de rapport fiscal détaillé en HTML.
+Generateur de rapport fiscal detaille en HTML et PDF.
 """
 import json
 from datetime import datetime
@@ -12,19 +12,31 @@ class ReportGenerator:
         self.output_dir.mkdir(exist_ok=True)
 
     def generate(self, result: dict, documents: list[dict], profile: dict) -> str:
-        """Génère un rapport HTML détaillé et retourne le chemin du fichier."""
+        """Genere un rapport HTML + PDF detaille. Retourne le nom de base (sans extension)."""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"rapport_fiscal_{timestamp}.html"
-        filepath = self.output_dir / filename
+        basename = f"rapport_fiscal_{timestamp}"
 
         html = self._render_html(result, documents, profile)
-        filepath.write_text(html, encoding="utf-8")
 
-        # Sauvegarder aussi le JSON brut
-        json_path = self.output_dir / f"rapport_fiscal_{timestamp}.json"
+        # Sauvegarder le HTML
+        html_path = self.output_dir / f"{basename}.html"
+        html_path.write_text(html, encoding="utf-8")
+
+        # Sauvegarder le JSON brut
+        json_path = self.output_dir / f"{basename}.json"
         json_path.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
 
-        return filename
+        # Generer le PDF
+        pdf_path = self.output_dir / f"{basename}.pdf"
+        try:
+            from weasyprint import HTML as WeasyHTML
+            WeasyHTML(string=html).write_pdf(pdf_path)
+            print(f"[RAPPORT] PDF genere : {pdf_path}")
+        except Exception as e:
+            print(f"[RAPPORT] Erreur generation PDF : {e}")
+            print("[RAPPORT] Le rapport HTML reste disponible.")
+
+        return basename
 
     def _render_html(self, result: dict, documents: list[dict], profile: dict) -> str:
         situation = result.get("situation", {})

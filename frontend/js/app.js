@@ -173,7 +173,7 @@ function handleMessage(data) {
             ingestionInProgress = false;
             isWaiting = false;
             enableInput();
-            addReportMessage(data.content, data.report_path);
+            addReportMessage(data.content, data.report_html, data.report_pdf);
             break;
         default:
             if (!data.content) return;
@@ -291,20 +291,29 @@ function addStatusMessage(text) {
     scrollToBottom();
 }
 
-function addReportMessage(text, reportPath) {
+function addReportMessage(text, reportHtml, reportPdf) {
     const msg = document.createElement('div');
     msg.className = 'message assistant';
     msg.innerHTML = `
         <div class="message-avatar">AI</div>
         <div class="message-bubble">
             <p>${escapeHtml(text)}</p>
-            <a href="/output/${reportPath}" target="_blank" class="report-link">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                    <polyline points="14 2 14 8 20 8"/>
-                </svg>
-                Ouvrir le rapport détaillé
-            </a>
+            <div class="report-links">
+                <a href="/output/${reportPdf || ''}" target="_blank" class="report-link report-link-pdf">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                    </svg>
+                    Telecharger le rapport PDF
+                </a>
+                <a href="/output/${reportHtml || ''}" target="_blank" class="report-link report-link-html">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <line x1="2" y1="12" x2="22" y2="12"/>
+                    </svg>
+                    Voir en ligne (HTML)
+                </a>
+            </div>
         </div>
     `;
     chatMessages.appendChild(msg);

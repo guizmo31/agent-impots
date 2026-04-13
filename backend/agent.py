@@ -338,20 +338,25 @@ class AgentFiscal:
         return {"categories": categories, "detected_types": detected_types}
 
     def _generate_preliminary_questions(self, quick_analysis: dict) -> list[str]:
-        """Genere des questions structurantes basees sur les types de documents detectes."""
+        """Genere des questions structurantes basees sur les types de documents detectes.
+        Ne pose PAS les questions dont la reponse est deja dans le profil."""
         questions = []
         types = quick_analysis.get("detected_types", set())
         categories = quick_analysis.get("categories", {})
+        foyer = self.profile.data.get("foyer", {}) if self.profile else {}
 
-        # Questions universelles (toujours posees)
-        questions.append(
-            "Quelle est votre situation familiale au 31/12/2025 ? "
-            "(celibataire, marie(e), pacse(e), divorce(e), veuf/veuve)"
-        )
-        questions.append(
-            "Combien d'enfants avez-vous a charge ? "
-            "(mineurs, ou majeurs rattaches de moins de 25 ans en etudes)"
-        )
+        # Questions universelles — seulement si pas deja dans le profil
+        if not foyer.get("situation"):
+            questions.append(
+                "Quelle est votre situation familiale au 31/12/2025 ? "
+                "(celibataire, marie(e), pacse(e), divorce(e), veuf/veuve)"
+            )
+        if foyer.get("nb_enfants_mineurs", 0) == 0 and not foyer.get("situation"):
+            # Demander les enfants seulement si la situation n'est pas connue non plus
+            questions.append(
+                "Combien d'enfants avez-vous a charge ? "
+                "(mineurs, ou majeurs rattaches de moins de 25 ans en etudes)"
+            )
 
         # Questions adaptees aux documents detectes
         if "immobilier" in categories:
@@ -690,22 +695,37 @@ class AgentFiscal:
 
         rag_context = self.rag.retrieve("parts fiscales situation familiale enfants charges déductibles", top_k=5, max_tokens=2000)
 
+        # Construire la liste de ce qui est DEJA connu pour eviter les questions redondantes
+        already_known = []
+        foyer = self.profile.data.get("foyer", {}) if self.profile else {}
+        if foyer.get("situation"):
+            already_known.append(f"situation familiale: {foyer['situation']}")
+        if foyer.get("nb_enfants_mineurs", 0) > 0:
+            already_known.append(f"enfants a charge: {foyer['nb_enfants_mineurs']}")
+        for note in (self.profile.data.get("notes", []) if self.profile else []):
+            if isinstance(note, str) and len(note) < 100:
+                already_known.append(note)
+
+        known_text = "\n".join(f"- {k}" for k in already_known) if already_known else "(rien)"
+
         prompt = (
             f"## Referentiel fiscal\n{rag_context}\n\n"
             f"## Profil fiscal actuel du contribuable\n```json\n{profile_json}\n```\n\n"
+            f"## Informations DEJA CONNUES (ne PAS redemander)\n{known_text}\n\n"
             "## Mission\n\n"
             "IMPORTANT : Reponds UNIQUEMENT en francais.\n\n"
-            "Analyse ce profil fiscal et identifie TOUTES les informations manquantes "
+            "Analyse ce profil fiscal et identifie les informations MANQUANTES "
             "pour pouvoir calculer l'impot. Genere des questions PRECISES pour les obtenir.\n\n"
-            "Regles :\n"
-            "- Toutes les questions doivent etre en FRANCAIS\n"
-            "- Ne demande PAS ce qui est deja dans le profil\n"
-            "- Priorise : situation familiale, nb enfants, regime foncier (si foncier detecte), credits d'impot\n"
-            "- Maximum 10 questions, classees par importance\n\n"
+            "Regles STRICTES :\n"
+            "- Toutes les questions en FRANCAIS\n"
+            "- Ne JAMAIS redemander ce qui est deja dans le profil ou dans les infos connues ci-dessus\n"
+            "- La situation familiale et le nombre d'enfants sont deja connus si presents dans le profil\n"
+            "- Priorise : regime foncier (si foncier detecte), credits d'impot, charges deductibles\n"
+            "- Maximum 8 questions\n"
+            "- Si le profil est suffisant pour calculer, retourne un tableau vide\n\n"
             "Reponds en JSON :\n"
             "```json\n"
-            '{"missing": ["situation familiale", "nombre d\'enfants"], '
-            '"questions": ["Quelle est votre situation familiale au 31/12/2025 ?", "Combien d\'enfants avez-vous a charge ?"]}\n'
+            '{"missing": [], "questions": []}\n'
             "```"
         )
 
@@ -1001,8 +1021,9 @@ class AgentFiscal:
             self._msg(summary),
             {
                 "type": "report",
-                "content": "Le rapport détaillé a été sauvegardé.",
-                "report_path": report_path,
+                "content": "Le rapport detaille a ete sauvegarde.",
+                "report_html": f"{report_path}.html",
+                "report_pdf": f"{report_path}.pdf",
                 "state": STATE_DONE,
             },
         ]
@@ -1056,27 +1077,25 @@ class AgentFiscal:
         return msg
 
     def _default_questions_from_profile(self) -> list[str]:
-        """Génère des questions par défaut basées sur les trous du profil."""
+        """Genere des questions par defaut basees sur les trous du profil.
+        Ne pose JAMAIS une question dont la reponse est deja dans le profil."""
         questions = []
         p = self.profile.data
+        foyer = p.get("foyer", {})
+        revenus = p.get("revenus", {})
 
-        if not p["foyer"]["situation"]:
-            questions.append("Quelle est votre situation familiale au 31/12/2025 ? (célibataire, marié(e), pacsé(e), divorcé(e), veuf/veuve)")
-        if p["foyer"]["nb_parts"] == 0:
-            questions.append("Combien d'enfants avez-vous à charge ? (mineurs, ou majeurs rattachés < 25 ans)")
-        if not p["revenus"]["salaires"] and not p["revenus"]["pensions_retraite"]:
+        if not foyer.get("situation"):
+            questions.append("Quelle est votre situation familiale au 31/12/2025 ? (celibataire, marie(e), pacse(e), divorce(e), veuf/veuve)")
+        if foyer.get("nb_enfants_mineurs", 0) == 0 and not foyer.get("situation"):
+            questions.append("Combien d'enfants avez-vous a charge ? (mineurs, ou majeurs rattaches < 25 ans)")
+        if not revenus.get("salaires") and not revenus.get("pensions_retraite"):
             questions.append("Quels sont vos revenus principaux ? (salaires, pensions, etc.)")
-        if p["revenus"]["foncier_nu"] and not any(f.get("regime") for f in p["revenus"]["foncier_nu"]):
-            questions.append("Pour vos revenus fonciers, êtes-vous au régime micro-foncier ou au régime réel ?")
-        if p["revenus"]["foncier_meuble"] and not any(f.get("regime") for f in p["revenus"]["foncier_meuble"]):
-            questions.append("Pour vos locations meublées, êtes-vous au régime micro-BIC ou au régime réel ?")
+        if revenus.get("foncier_nu") and not any(f.get("regime") for f in revenus["foncier_nu"]):
+            questions.append("Pour vos revenus fonciers, etes-vous au regime micro-foncier ou au regime reel ?")
+        if revenus.get("foncier_meuble") and not any(f.get("regime") for f in revenus["foncier_meuble"]):
+            questions.append("Pour vos locations meublees, etes-vous au regime micro-BIC ou au regime reel ?")
 
-        if not questions:
-            questions = [
-                "Avez-vous d'autres revenus non détectés dans les documents ? (foncier, dividendes, micro-entreprise, etc.)",
-                "Avez-vous des charges déductibles ? (dons, emploi à domicile, PER, pension alimentaire, etc.)",
-            ]
-
+        # Ne pas ajouter de questions generiques si le profil est deja bien rempli
         return questions
 
     def _build_result_summary(self, result: dict) -> str:
