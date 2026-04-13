@@ -120,14 +120,6 @@ echo ""
 echo "  → Mistral 7B (~4 Go) — modèle de secours"
 $OLLAMA_CMD pull mistral 2>/dev/null && echo "[OK] Modèle Mistral 7B installé" || true
 
-echo ""
-echo "  → nomic-embed-text (~270 Mo) — embeddings pour le RAG"
-if $OLLAMA_CMD pull nomic-embed-text; then
-    echo "[OK] Modèle d'embeddings installé"
-else
-    echo "[ATTENTION] Échec — l'app fonctionnera en mode TF-IDF"
-    echo "  Vous pourrez relancer : ollama pull nomic-embed-text"
-fi
 
 # -----------------------------------------------
 # Terminé
@@ -138,8 +130,8 @@ echo "  Installation terminée avec succès !"
 echo "============================================"
 echo ""
 echo "  Modèles installés :"
-echo "    - Mistral 7B (LLM principal)"
-echo "    - nomic-embed-text (embeddings RAG)"
+echo "    - Mistral-Nemo 12B (LLM principal)"
+echo "    - Mistral 7B (modèle de secours)"
 echo ""
 echo "  Pour lancer l'agent :"
 echo "    ./lancer.sh"

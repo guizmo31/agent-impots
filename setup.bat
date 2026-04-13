@@ -92,27 +92,14 @@ if errorlevel 1 (
     echo [OK] Modele Mistral 7B installe
 )
 
-:: Telecharger le modele d'embeddings pour le RAG
-echo.
-echo [5/5] Telechargement du modele d'embeddings nomic-embed-text (environ 270 Mo)...
-echo Ce modele permet la recherche semantique dans les connaissances fiscales...
-%OLLAMA_CMD% pull nomic-embed-text
-if errorlevel 1 (
-    echo [ATTENTION] Echec du telechargement du modele d'embeddings
-    echo L'application fonctionnera quand meme en mode TF-IDF (mots-cles)
-    echo Vous pourrez relancer : %OLLAMA_CMD% pull nomic-embed-text
-) else (
-    echo [OK] Modele d'embeddings installe
-)
-
 echo.
 echo ============================================
 echo   Installation terminee avec succes !
 echo ============================================
 echo.
 echo Modeles installes :
-echo   - Mistral 7B (LLM principal, ~4 Go)
-echo   - nomic-embed-text (embeddings RAG, ~270 Mo)
+echo   - Mistral-Nemo 12B (LLM principal, ~7 Go)
+echo   - Mistral 7B (modele de secours, ~4 Go)
 echo.
 echo Pour lancer l'application :
 echo   Double-cliquez sur lancer.bat

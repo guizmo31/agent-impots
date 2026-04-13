@@ -19,7 +19,7 @@ from ollama_client import query_llm
 from document_parser import DocumentParser
 from fiscal_engine import FiscalEngine
 from report_generator import ReportGenerator
-from rag import FiscalRAG
+from fiscal_knowledge import get_cases_summary, get_full_context_for_llm, get_all_case_ids
 from fiscal_profile import FiscalProfile
 from session_store import SessionStore
 from extraction_store import ExtractionStore
@@ -71,7 +71,9 @@ class AgentFiscal:
         self.parser = document_parser
         self.engine = fiscal_engine
         self.reporter = report_generator
-        self.rag = FiscalRAG()
+        # Base de connaissances fiscales (injection directe, pas de RAG)
+        self._fiscal_context = get_full_context_for_llm()
+        self._known_cases = get_all_case_ids()
         self.session_id = session_id
         self.md_converter = MarkdownConverter(output_dir or str(Path(__file__).resolve().parent.parent / "output"))
 
@@ -698,10 +700,6 @@ class AgentFiscal:
         if pending_batch:
             processed = await self._flush_batch(pending_batch, processed, total)
 
-        # Embeddings en une seule passe a la fin
-        if self.extractions:
-            self.extractions.finalize_embeddings()
-
     async def _flush_batch(self, batch: list[dict], processed: int, total: int) -> int:
         """Traite un batch de petits documents en un seul appel LLM."""
         filenames = [d["filename"] for d in batch]
@@ -772,8 +770,7 @@ class AgentFiscal:
     async def _step_validation_detect_missing(self) -> list[dict]:
         """Analyse le profil et identifie ce qui manque pour le calcul."""
         profile_json = self.profile.get_for_llm()
-
-        rag_context = self.rag.retrieve("parts fiscales situation familiale enfants charges déductibles", top_k=5, max_tokens=2000)
+        fiscal_ref = get_cases_summary()
 
         # Construire la liste de ce qui est DEJA connu pour eviter les questions redondantes
         already_known = []
@@ -789,7 +786,7 @@ class AgentFiscal:
         known_text = "\n".join(f"- {k}" for k in already_known) if already_known else "(rien)"
 
         prompt = (
-            f"## Referentiel fiscal\n{rag_context}\n\n"
+            f"## Referentiel fiscal\n{fiscal_ref}\n\n"
             f"## Profil fiscal actuel du contribuable\n```json\n{profile_json}\n```\n\n"
             f"## Informations DEJA CONNUES (ne PAS redemander)\n{known_text}\n\n"
             "## Mission\n\n"
@@ -1010,15 +1007,12 @@ class AgentFiscal:
 
         profile_json = self.profile.get_for_llm()
         print(f"[CALCUL] Profil JSON : {len(profile_json)} chars")
-
-        # RAG ciblé : chercher les règles pertinentes au profil
-        rag_context = self.rag.retrieve(profile_json[:3000], top_k=15, max_tokens=6000)
-        print(f"[CALCUL] RAG : {len(rag_context)} chars de règles fiscales")
+        print(f"[CALCUL] Base fiscale : {len(self._fiscal_context):,} chars (injection directe)")
 
         prompt = (
-            "# RÉFÉRENTIEL FISCAL\n"
-            "Utilise UNIQUEMENT ces cases et règles. Ne jamais inventer de numéro de case.\n\n"
-            f"{rag_context}\n\n"
+            "# REFERENTIEL FISCAL COMPLET\n"
+            "Utilise UNIQUEMENT ces cases et regles. Ne jamais inventer de numero de case.\n\n"
+            f"{self._fiscal_context}\n\n"
             "---\n\n"
             "# PROFIL FISCAL DU CONTRIBUABLE\n"
             "C'est ta SEULE source de données. Tous les montants viennent de ce profil.\n\n"
@@ -1089,7 +1083,7 @@ class AgentFiscal:
             warnings.append("Impôt net négatif — vérifiez les réductions/crédits.")
 
         # Vérifier que les cases existent dans le référentiel
-        known_cases = set(self.rag.get_all_cases())
+        known_cases = self._known_cases
         for c in result.get("cases", []):
             case_num = c.get("case", "")
             if case_num and known_cases and case_num not in known_cases:
