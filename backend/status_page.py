@@ -237,8 +237,13 @@ class StatusPage:
 <title>Status - {title}</title>
 <style>
 * {{ margin:0; padding:0; box-sizing:border-box; }}
-body {{ font-family:'Segoe UI',Tahoma,sans-serif; background:#f0f2f5; color:#2c3e50; padding:20px; }}
-.container {{ max-width:1000px; margin:0 auto; }}
+body {{ font-family:'Segoe UI',Tahoma,sans-serif; background:#f0f2f5; color:#2c3e50; }}
+.layout {{ display:flex; height:100vh; }}
+.sidebar {{ width:280px; flex-shrink:0; background:linear-gradient(180deg,#1e3a5f,#15293f); display:flex; flex-direction:column; align-items:center; justify-content:center; padding:20px; }}
+.sidebar img {{ width:100%; object-fit:contain; border-radius:12px; }}
+.main-col {{ flex:1; display:flex; flex-direction:column; min-width:0; overflow-y:auto; }}
+.container {{ max-width:1000px; margin:0 auto; padding:20px; }}
+@media(max-width:768px) {{ .layout {{ flex-direction:column; }} .sidebar {{ width:100%; flex-direction:row; padding:12px; }} .sidebar img {{ width:50px; }} }}
 .header {{ background:linear-gradient(135deg,#1e3a5f,#2980b9); color:white; padding:24px; border-radius:12px; margin-bottom:20px; display:flex; justify-content:space-between; align-items:center; }}
 .header h1 {{ font-size:22px; }}
 .header .meta {{ font-size:13px; opacity:0.8; text-align:right; }}
@@ -273,6 +278,9 @@ th {{ background:#f0f4f8; font-weight:600; color:#1e3a5f; }}
 </style>
 </head>
 <body>
+<div class="layout">
+<aside class="sidebar"><img src="/img/agent-impots.png" alt="Agent IA des impots" /></aside>
+<div class="main-col">
 <div class="container">
 <div class="header">
     <div>
@@ -306,6 +314,8 @@ th {{ background:#f0f4f8; font-weight:600; color:#1e3a5f; }}
 {report_html}
 
 <div class="footer">Agent IA des impots "100% local" (sans internet)</div>
+</div>
+</div>
 </div>
 </body>
 </html>"""

@@ -72,6 +72,7 @@ async def documents_page():
     """Page de visualisation des documents convertis en markdown."""
     from fastapi.responses import HTMLResponse
     from markdown_converter import MarkdownConverter
+    from datetime import datetime
     mc = MarkdownConverter(str(OUTPUT_DIR))
     markdowns = mc.get_all_markdowns()
 
@@ -96,6 +97,7 @@ async def documents_page():
 <html lang="fr"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Documents convertis en Markdown</title>
+<meta http-equiv="refresh" content="10">
 <style>
 * {{ margin:0; padding:0; box-sizing:border-box; }}
 body {{ font-family:'Segoe UI',Tahoma,sans-serif; background:#f0f2f5; color:#2c3e50; }}
@@ -105,8 +107,7 @@ body {{ font-family:'Segoe UI',Tahoma,sans-serif; background:#f0f2f5; color:#2c3
 .main-col {{ flex:1; display:flex; flex-direction:column; min-width:0; overflow:hidden; }}
 .topbar {{ background:linear-gradient(135deg,#1e3a5f,#2980b9); color:white; padding:16px 24px; display:flex; justify-content:space-between; align-items:center; }}
 .topbar h1 {{ font-size:20px; }}
-.topbar a {{ color:white; text-decoration:none; opacity:0.8; }}
-.topbar a:hover {{ opacity:1; }}
+.topbar-meta {{ font-size:12px; opacity:0.7; }}
 .content {{ flex:1; overflow-y:auto; padding:20px; }}
 .info {{ background:white; border-radius:12px; padding:16px; margin-bottom:16px; box-shadow:0 1px 4px rgba(0,0,0,0.06); font-size:14px; color:#555; }}
 .doc-card {{ background:white; border-radius:10px; margin-bottom:8px; box-shadow:0 1px 3px rgba(0,0,0,0.06); overflow:hidden; }}
@@ -127,7 +128,7 @@ pre {{ font-size:13px; line-height:1.6; white-space:pre-wrap; word-wrap:break-wo
 <div class="main-col">
 <div class="topbar">
     <h1>Documents convertis ({len(markdowns)} fichiers)</h1>
-    <a href="javascript:window.close()" onclick="window.close(); return false;">Fermer et revenir a l'agent</a>
+    <div class="topbar-meta">Mis a jour : {datetime.now().strftime('%d/%m/%Y %H:%M:%S')} - Rafraichissement auto toutes les 10s</div>
 </div>
 <div class="content">
 <div class="info">
