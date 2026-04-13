@@ -1,5 +1,9 @@
 # Agent Impots
 
+<p align="center">
+  <img src="frontend/img/agent-impots.png" alt="Agent IA des impots" width="250">
+</p>
+
 **Agent fiscal 100% local pour preparer sa declaration d'impots sur le revenu en France.**
 
 > **Aucune donnee ne quitte votre ordinateur.** Le modele d'IA (Mistral-Nemo 12B) tourne localement via Ollama, vos documents restent sur votre disque, aucun appel reseau n'est effectue. Vos donnees fiscales ne transitent par aucun cloud, aucun serveur distant, aucune API externe.
