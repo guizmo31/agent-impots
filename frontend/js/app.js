@@ -399,6 +399,30 @@ document.getElementById('new-session-name').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') startNewSession();
 });
 
+document.getElementById('interrupt-btn').addEventListener('click', interruptSession);
+
+function interruptSession() {
+    if (!confirm('Votre progression est sauvegardee automatiquement.\nVoulez-vous revenir a l\'accueil ?')) return;
+
+    // Fermer le WebSocket proprement
+    if (ws) {
+        ws.onclose = null; // Empecher la reconnexion auto
+        ws.close();
+        ws = null;
+    }
+
+    // Nettoyer le chat
+    chatMessages.innerHTML = '';
+    ingestionInProgress = false;
+
+    // Cacher le bouton status
+    const statusLink = document.getElementById('status-page-link');
+    if (statusLink) statusLink.style.display = 'none';
+
+    // Revenir a la page d'accueil
+    showSessionPicker();
+}
+
 // --- Utilities ---
 
 function scrollToBottom() {

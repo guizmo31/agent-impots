@@ -448,6 +448,27 @@ textarea:disabled {
     cursor: not-allowed;
 }
 
+.btn-interrupt {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    background: none;
+    border: 2px solid var(--error);
+    color: var(--error);
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.2s, color 0.2s;
+}
+
+.btn-interrupt:hover {
+    background: var(--error);
+    color: white;
+}
+
 .disclaimer {
     text-align: center;
     font-size: 12px;
