@@ -25,6 +25,7 @@ from session_store import SessionStore
 from extraction_store import ExtractionStore
 from extractors import extract_structured, extract_batch
 from status_page import StatusPage
+from markdown_converter import MarkdownConverter
 
 SYSTEM_PROMPT = (
     "Tu es un assistant fiscal expert en declaration d'impots francaise. "
@@ -72,6 +73,7 @@ class AgentFiscal:
         self.reporter = report_generator
         self.rag = FiscalRAG()
         self.session_id = session_id
+        self.md_converter = MarkdownConverter(output_dir or str(Path(__file__).resolve().parent.parent / "output"))
 
         # Memoire persistante
         self.store = SessionStore(session_id) if session_id else None
@@ -614,15 +616,14 @@ class AgentFiscal:
                 pass
 
     async def _run_ingestion(self, files: list[Path], folder: Path):
-        """Boucle d'extraction avec batching des petits documents."""
+        """Boucle d'extraction : fichier -> markdown (cache) -> LLM."""
         total = len(files)
         already_done = {e.get("doc_id") for e in self.extractions.get_all()} if self.extractions else set()
 
-        # Separer les fichiers a traiter en 2 groupes : petits (batchables) et gros
         BATCH_CONTENT_LIMIT = 1500  # chars — en dessous, on batch
-        BATCH_SIZE = 3  # docs par batch
+        BATCH_SIZE = 3
 
-        pending_batch: list[dict] = []  # [{"filename", "content", "index"}]
+        pending_batch: list[dict] = []
         processed = 0
 
         for i, f in enumerate(files):
@@ -638,20 +639,25 @@ class AgentFiscal:
                 })
                 continue
 
-            # Parser le document
-            doc_data = self.parser.parse(str(f))
-            if not doc_data or not doc_data.get("content"):
-                processed += 1
-                await self._send_progress({
-                    "type": "progress", "current": processed, "total": total,
-                    "percent": int((processed / total) * 100), "filename": filename,
-                    "status": "error", "detail": "Contenu non extractible",
-                })
-                continue
+            # Etape 1 : Convertir en markdown (instantane, pas de LLM)
+            md_result = self.md_converter.convert(str(f))
+            if not md_result or not md_result.get("content"):
+                # Fallback sur le parser brut
+                doc_data = self.parser.parse(str(f))
+                if not doc_data or not doc_data.get("content"):
+                    processed += 1
+                    await self._send_progress({
+                        "type": "progress", "current": processed, "total": total,
+                        "percent": int((processed / total) * 100), "filename": filename,
+                        "status": "error", "detail": "Contenu non extractible",
+                    })
+                    continue
+                content = doc_data["content"]
+            else:
+                content = md_result["content"]
+                print(f"[MD] {filename} -> {md_result['md_filename']} ({len(content)} chars)")
 
-            content = doc_data["content"]
-
-            # Petit document -> ajouter au batch
+            # Etape 2 : Envoyer le markdown au LLM pour extraction
             if len(content) <= BATCH_CONTENT_LIMIT:
                 pending_batch.append({"filename": filename, "content": content, "index": i})
 

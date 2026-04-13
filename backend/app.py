@@ -67,6 +67,71 @@ async def reference():
     return HTMLResponse(generate_reference_html())
 
 
+@app.get("/documents")
+async def documents_page():
+    """Page de visualisation des documents convertis en markdown."""
+    from fastapi.responses import HTMLResponse
+    from markdown_converter import MarkdownConverter
+    mc = MarkdownConverter(str(OUTPUT_DIR))
+    markdowns = mc.get_all_markdowns()
+
+    cards = ""
+    for md in markdowns:
+        # Lire le contenu complet
+        md_path = OUTPUT_DIR / "markdown" / md["md_filename"]
+        content = md_path.read_text(encoding="utf-8") if md_path.exists() else ""
+        # Echapper le HTML dans le contenu markdown
+        escaped = content.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        cards += f"""
+        <div class="doc-card">
+            <div class="doc-header" onclick="this.parentElement.classList.toggle('open')">
+                <span class="doc-name">{md['source_filename']}</span>
+                <span class="doc-size">{md['size']:,} chars</span>
+                <span class="doc-toggle">&#9660;</span>
+            </div>
+            <div class="doc-content"><pre>{escaped}</pre></div>
+        </div>"""
+
+    html = f"""<!DOCTYPE html>
+<html lang="fr"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Documents convertis en Markdown</title>
+<style>
+* {{ margin:0; padding:0; box-sizing:border-box; }}
+body {{ font-family:'Segoe UI',Tahoma,sans-serif; background:#f0f2f5; color:#2c3e50; }}
+.topbar {{ background:linear-gradient(135deg,#1e3a5f,#2980b9); color:white; padding:16px 24px; position:sticky; top:0; z-index:10; display:flex; justify-content:space-between; align-items:center; }}
+.topbar h1 {{ font-size:20px; }}
+.topbar a {{ color:white; text-decoration:none; opacity:0.8; }}
+.topbar a:hover {{ opacity:1; }}
+.container {{ max-width:1000px; margin:0 auto; padding:20px; }}
+.info {{ background:white; border-radius:12px; padding:16px; margin-bottom:16px; box-shadow:0 1px 4px rgba(0,0,0,0.06); font-size:14px; color:#555; }}
+.doc-card {{ background:white; border-radius:10px; margin-bottom:8px; box-shadow:0 1px 3px rgba(0,0,0,0.06); overflow:hidden; }}
+.doc-header {{ display:flex; align-items:center; padding:12px 16px; cursor:pointer; gap:12px; transition:background 0.2s; }}
+.doc-header:hover {{ background:#f8f9fa; }}
+.doc-name {{ font-weight:600; flex:1; }}
+.doc-size {{ font-size:12px; color:#95a5a6; }}
+.doc-toggle {{ font-size:10px; color:#95a5a6; transition:transform 0.2s; }}
+.doc-card.open .doc-toggle {{ transform:rotate(180deg); }}
+.doc-content {{ display:none; border-top:1px solid #e8ecf1; padding:16px; background:#fafbfc; max-height:600px; overflow:auto; }}
+.doc-card.open .doc-content {{ display:block; }}
+pre {{ font-size:13px; line-height:1.6; white-space:pre-wrap; word-wrap:break-word; font-family:'Consolas','Courier New',monospace; }}
+.empty {{ text-align:center; padding:40px; color:#95a5a6; }}
+</style></head><body>
+<div class="topbar">
+    <h1>Documents convertis ({len(markdowns)} fichiers)</h1>
+    <a href="/">Retour a l'agent</a>
+</div>
+<div class="container">
+<div class="info">
+    Chaque document d'entree est converti en Markdown avant d'etre analyse par l'IA.
+    Vous pouvez verifier ici que le contenu a ete correctement extrait.
+    Cliquez sur un document pour voir son contenu.
+</div>
+{"<div class='empty'>Aucun document converti pour l'instant.</div>" if not markdowns else cards}
+</div></body></html>"""
+    return HTMLResponse(html)
+
+
 # ---- API Sessions ----
 
 @app.get("/api/sessions")
