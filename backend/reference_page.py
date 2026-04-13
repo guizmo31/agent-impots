@@ -15,8 +15,8 @@ DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
 # Exemples concrets pour les cases les plus courantes
 EXEMPLES = {
-    "1AJ": "Vous etes salarie chez Renault avec un salaire net imposable annuel de 42 000 EUR (visible sur votre bulletin de paie de decembre, ligne 'Cumul net imposable'). Inscrivez 42 000 en case 1AJ.",
-    "1BJ": "Votre conjoint(e) travaille chez Airbus avec un net imposable de 38 000 EUR/an. Inscrivez 38 000 en case 1BJ.",
+    "1AJ": "Vous etes salarie chez Employeur-A avec un salaire net imposable annuel de 42 000 EUR (visible sur votre bulletin de paie de decembre, ligne 'Cumul net imposable'). Inscrivez 42 000 en case 1AJ.",
+    "1BJ": "Votre conjoint(e) travaille chez Employeur-B avec un net imposable de 38 000 EUR/an. Inscrivez 38 000 en case 1BJ.",
     "1AK": "Vous avez fait 200h supplementaires dans l'annee, exonerees a hauteur de 5 000 EUR. Inscrivez 5 000 en case 1AK. Ce montant n'est pas ajoute au revenu imposable.",
     "1GB": "Vous etes gerant majoritaire de votre SARL et vous versez 36 000 EUR/an de remuneration. Inscrivez 36 000 en case 1GB (pas en 1AJ car article 62 du CGI).",
     "1AS": "Vous percevez une retraite CNAV de 1 500 EUR/mois soit 18 000 EUR/an. Inscrivez 18 000 en case 1AS. Un abattement de 10% sera applique automatiquement (min 422 EUR, max 4 123 EUR).",
@@ -41,7 +41,7 @@ EXEMPLES = {
     "6GU": "Votre fils majeur (22 ans, non rattache) est etudiant. Vous lui versez 500 EUR/mois = 6 000 EUR/an. Inscrivez 6 000 en case 6GU (plafond 6 674 EUR). Votre fils doit declarer 6 000 EUR de son cote.",
     "6GI": "Votre mere agee vit chez vous. Vous la nourrissez et l'hebergez : deduction forfaitaire de 3 968 EUR (sans justificatif). Vous payez aussi ses frais medicaux : 1 500 EUR. Inscrivez 5 468 EUR en case 6GI.",
     "6NS": "Vous avez verse 4 000 EUR sur votre PER (Plan Epargne Retraite). Inscrivez 4 000 en case 6NS. Ce montant se deduit de votre revenu imposable. Si votre TMI est 30%, economie d'impot = 1 200 EUR.",
-    "7UF": "Vous avez donne 500 EUR a une association d'interet general (Restos du Coeur, Croix-Rouge...). Inscrivez 500 en case 7UF. Reduction d'impot = 66% x 500 = 330 EUR.",
+    "7UF": "Vous avez donne 500 EUR a une association d'interet general. Inscrivez 500 en case 7UF. Reduction d'impot = 66% x 500 = 330 EUR.",
     "7UD": "Vous avez donne 200 EUR a une association d'aide aux personnes en difficulte. Inscrivez 200 en case 7UD. Reduction = 75% x 200 = 150 EUR (plafond 1 000 EUR pour le taux de 75%).",
     "7DB": "Vous employez une femme de menage 4h/semaine a 15 EUR/h = 3 120 EUR/an. Inscrivez 3 120 en case 7DB. Credit d'impot = 50% x 3 120 = 1 560 EUR (plafond 12 000 EUR).",
     "7GA": "Vous payez la creche pour votre enfant de 3 ans : 3 000 EUR/an (apres deduction du complement CAF). Inscrivez 3 000 en case 7GA. Credit d'impot = 50% x 3 000 = 1 500 EUR (plafond 3 500 EUR).",
@@ -54,7 +54,7 @@ EXEMPLES = {
     "T": "Vous etes divorc(e) et vivez seul(e) avec vos 2 enfants. Cochez la case T. Au lieu de 1 + 0,5 + 0,5 = 2 parts, vous aurez 1 + 1 + 0,5 = 2,5 parts (le 1er enfant compte pour 1 part entiere).",
     "L": "Vous avez 60 ans, vous vivez seul(e) et vous avez eleve votre fils pendant 15 ans (il est maintenant adulte independant). Cochez la case L. Vous beneficiez d'une demi-part supplementaire (avantage plafonne a 1 050 EUR).",
     "P": "Vous etes titulaire de la carte mobilite inclusion (CMI) mention invalidite (taux >= 80%). Cochez la case P pour beneficier d'une demi-part supplementaire.",
-    "2TS": "Votre SCPI Corum vous a distribue 1 200 EUR de revenus financiers (indiques sur l'IFU). Inscrivez 1 200 en case 2TS.",
+    "2TS": "Votre SCPI vous a distribue 1 200 EUR de revenus financiers (indiques sur l'IFU). Inscrivez 1 200 en case 2TS.",
     "9HI": "Vous possedez votre residence principale (estimee 400 000 EUR, abattement 30% = 280 000 EUR), un appartement locatif (250 000 EUR) et des parts de SCPI (80 000 EUR). Total brut = 610 000 EUR. Dettes : pret restant 180 000 EUR. Net = 430 000 EUR. C'est < 1 300 000 EUR, vous n'etes pas assujetti a l'IFI.",
 }
 
@@ -245,14 +245,34 @@ th {{ background:#f0f4f8; font-weight:600; color:#1e3a5f; }}
     .topbar-inner {{ flex-direction:column; }}
     .container {{ padding:12px; }}
 }}
+.layout {{ display:flex; height:100vh; }}
+.sidebar {{
+    width:280px; flex-shrink:0;
+    background:linear-gradient(180deg,#1e3a5f,#15293f);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding:20px; gap:20px;
+}}
+.sidebar img {{ width:100%; object-fit:contain; border-radius:12px; }}
+.main-col {{ flex:1; display:flex; flex-direction:column; min-width:0; overflow:hidden; }}
+@media(max-width:768px) {{
+    .layout {{ flex-direction:column; }}
+    .sidebar {{ width:100%; flex-direction:row; padding:12px; gap:10px; justify-content:flex-start; }}
+    .sidebar img {{ width:50px; }}
+}}
 </style>
 </head>
 <body>
 
+<div class="layout">
+<aside class="sidebar">
+    <img src="/img/agent-impots.png" alt="Agent IA des impots" />
+</aside>
+<div class="main-col">
+
 <div class="topbar">
 <div class="topbar-inner">
     <div>
-        <h1>Reference fiscale 2042</h1>
+        <h1>Reference fiscale utilisee par l'agent</h1>
         <div class="meta">{meta.get('source', 'Declaration des revenus')} | {meta.get('annee_revenus', '?')}</div>
     </div>
     <input type="text" class="search-box" id="search" placeholder="Rechercher une case, un mot-cle... (ex: 1AJ, RSU, LMNP, dividendes)" autofocus>
@@ -260,7 +280,7 @@ th {{ background:#f0f4f8; font-weight:600; color:#1e3a5f; }}
 </div>
 </div>
 
-<div class="container">
+<div class="container" style="flex:1; overflow-y:auto;">
 
 <div class="nav" id="nav">
     <a href="#bareme" class="active">Bareme IR</a>
@@ -319,6 +339,8 @@ search.addEventListener('input', () => {{
     noResults.style.display = (q && visible === 0) ? 'block' : 'none';
 }});
 </script>
+</div>
+</div>
 </body>
 </html>"""
 

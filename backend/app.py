@@ -99,11 +99,15 @@ async def documents_page():
 <style>
 * {{ margin:0; padding:0; box-sizing:border-box; }}
 body {{ font-family:'Segoe UI',Tahoma,sans-serif; background:#f0f2f5; color:#2c3e50; }}
-.topbar {{ background:linear-gradient(135deg,#1e3a5f,#2980b9); color:white; padding:16px 24px; position:sticky; top:0; z-index:10; display:flex; justify-content:space-between; align-items:center; }}
+.layout {{ display:flex; height:100vh; }}
+.sidebar {{ width:280px; flex-shrink:0; background:linear-gradient(180deg,#1e3a5f,#15293f); display:flex; flex-direction:column; align-items:center; justify-content:center; padding:20px; }}
+.sidebar img {{ width:100%; object-fit:contain; border-radius:12px; }}
+.main-col {{ flex:1; display:flex; flex-direction:column; min-width:0; overflow:hidden; }}
+.topbar {{ background:linear-gradient(135deg,#1e3a5f,#2980b9); color:white; padding:16px 24px; display:flex; justify-content:space-between; align-items:center; }}
 .topbar h1 {{ font-size:20px; }}
 .topbar a {{ color:white; text-decoration:none; opacity:0.8; }}
 .topbar a:hover {{ opacity:1; }}
-.container {{ max-width:1000px; margin:0 auto; padding:20px; }}
+.content {{ flex:1; overflow-y:auto; padding:20px; }}
 .info {{ background:white; border-radius:12px; padding:16px; margin-bottom:16px; box-shadow:0 1px 4px rgba(0,0,0,0.06); font-size:14px; color:#555; }}
 .doc-card {{ background:white; border-radius:10px; margin-bottom:8px; box-shadow:0 1px 3px rgba(0,0,0,0.06); overflow:hidden; }}
 .doc-header {{ display:flex; align-items:center; padding:12px 16px; cursor:pointer; gap:12px; transition:background 0.2s; }}
@@ -116,19 +120,23 @@ body {{ font-family:'Segoe UI',Tahoma,sans-serif; background:#f0f2f5; color:#2c3
 .doc-card.open .doc-content {{ display:block; }}
 pre {{ font-size:13px; line-height:1.6; white-space:pre-wrap; word-wrap:break-word; font-family:'Consolas','Courier New',monospace; }}
 .empty {{ text-align:center; padding:40px; color:#95a5a6; }}
+@media(max-width:768px) {{ .layout {{ flex-direction:column; }} .sidebar {{ width:100%; flex-direction:row; padding:12px; }} .sidebar img {{ width:50px; }} }}
 </style></head><body>
+<div class="layout">
+<aside class="sidebar"><img src="/img/agent-impots.png" alt="Agent IA des impots" /></aside>
+<div class="main-col">
 <div class="topbar">
     <h1>Documents convertis ({len(markdowns)} fichiers)</h1>
     <a href="/">Retour a l'agent</a>
 </div>
-<div class="container">
+<div class="content">
 <div class="info">
     Chaque document d'entree est converti en Markdown avant d'etre analyse par l'IA.
     Vous pouvez verifier ici que le contenu a ete correctement extrait.
     Cliquez sur un document pour voir son contenu.
 </div>
 {"<div class='empty'>Aucun document converti pour l'instant.</div>" if not markdowns else cards}
-</div></body></html>"""
+</div></div></div></body></html>"""
     return HTMLResponse(html)
 
 
