@@ -90,6 +90,31 @@ async def delete_session(session_id: str):
     return JSONResponse({"status": "deleted"})
 
 
+@app.post("/api/sessions/{session_id}/save")
+async def save_session(session_id: str):
+    """Force la sauvegarde complete de la session (etat + extractions + profil)."""
+    if session_id in active_agents:
+        agent = active_agents[session_id]
+        # Persister l'etat courant
+        agent._persist()
+        # Sauvegarder les extractions sur disque
+        if agent.extractions:
+            agent.extractions.save()
+        # Sauvegarder le profil
+        if agent.profile:
+            agent.profile.save()
+        # Mettre a jour le status page
+        if agent.status:
+            agent.status.set_state(agent.state)
+
+        docs_count = len(agent.extractions.get_all()) if agent.extractions else 0
+        print(f"[SESSION] Sauvegarde forcee : {session_id[:8]}... (etat={agent.state}, {docs_count} docs)")
+        return JSONResponse({"status": "saved", "documents_count": docs_count, "state": agent.state})
+
+    # Si l'agent n'est pas en memoire, les fichiers sont deja sur disque
+    return JSONResponse({"status": "already_saved"})
+
+
 # ---- WebSocket ----
 
 active_agents: dict[str, AgentFiscal] = {}

@@ -401,25 +401,44 @@ document.getElementById('new-session-name').addEventListener('keydown', (e) => {
 
 document.getElementById('interrupt-btn').addEventListener('click', interruptSession);
 
-function interruptSession() {
-    if (!confirm('Votre progression est sauvegardee automatiquement.\nVoulez-vous revenir a l\'accueil ?')) return;
+async function interruptSession() {
+    if (!confirm('Sauvegarder la session et revenir a l\'accueil ?\nVous pourrez reprendre plus tard exactement ou vous en etiez.')) return;
 
-    // Fermer le WebSocket proprement
+    const btn = document.getElementById('interrupt-btn');
+    btn.disabled = true;
+    btn.textContent = 'Sauvegarde en cours...';
+
+    // 1. Appeler l'API pour forcer la sauvegarde complete
+    try {
+        const response = await fetch(`/api/sessions/${sessionId}/save`, { method: 'POST' });
+        const result = await response.json();
+        console.log('Session sauvegardee:', result);
+    } catch (e) {
+        console.error('Erreur sauvegarde:', e);
+    }
+
+    // 2. Fermer le WebSocket proprement
     if (ws) {
         ws.onclose = null; // Empecher la reconnexion auto
         ws.close();
         ws = null;
     }
 
-    // Nettoyer le chat
+    // 3. Nettoyer le chat
     chatMessages.innerHTML = '';
     ingestionInProgress = false;
+    btn.disabled = false;
+    btn.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>
+        </svg>
+        Interrompre ma session`;
 
-    // Cacher le bouton status
+    // 4. Cacher le bouton status
     const statusLink = document.getElementById('status-page-link');
     if (statusLink) statusLink.style.display = 'none';
 
-    // Revenir a la page d'accueil
+    // 5. Revenir a la page d'accueil
     showSessionPicker();
 }
 
