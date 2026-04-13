@@ -10,29 +10,28 @@
     <div class="app">
         <header class="header">
             <div class="header-content">
-                <div class="logo">
-                    <img src="/img/agent-impots.png" alt="Agent IA des impots" />
-                </div>
                 <div>
                     <h1>Agent IA des impots <span class="local-badge">"100% local"</span></h1>
                     <p class="subtitle">Sans internet — vos donnees restent sur votre PC</p>
                 </div>
-                <a href="/reference" class="header-btn" target="_blank" title="Guide des cases 2042 et regles fiscales">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
-                    </svg>
-                    Reference
-                </a>
-                <a href="#" id="status-page-link" class="header-btn" style="display:none" target="_blank" title="Voir l'avancement detaille">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                        <polyline points="14 2 14 8 20 8"/>
-                    </svg>
-                    Status
-                </a>
-                <div class="status-badge" id="status-badge">
-                    <span class="status-dot"></span>
-                    <span id="status-text">Connexion...</span>
+                <div class="header-actions">
+                    <a href="/reference" class="header-btn btn-reference" target="_blank" title="Guide des cases 2042 et regles fiscales">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                        </svg>
+                        Reference fiscale
+                    </a>
+                    <a href="#" id="status-page-link" class="header-btn btn-status" style="display:none" target="_blank" title="Voir l'avancement detaille">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                            <polyline points="14 2 14 8 20 8"/>
+                        </svg>
+                        Suivi en direct
+                    </a>
+                    <div class="status-badge" id="status-badge">
+                        <span class="status-dot"></span>
+                        <span id="status-text">Connexion...</span>
+                    </div>
                 </div>
             </div>
         </header>
@@ -40,7 +39,7 @@
         <!-- Session picker (shown before chat) -->
         <div class="session-picker" id="session-picker">
             <div class="session-picker-content">
-                <h2>Vos déclarations</h2>
+                <h2>Vos declarations</h2>
                 <p>Reprenez une session existante ou commencez-en une nouvelle.</p>
 
                 <div class="session-list" id="session-list">
@@ -48,8 +47,8 @@
                 </div>
 
                 <div class="session-new">
-                    <input type="text" id="new-session-name" placeholder="Nom de la déclaration (ex: Impôts 2025)" />
-                    <button id="new-session-btn" class="btn-primary">Nouvelle déclaration</button>
+                    <input type="text" id="new-session-name" placeholder="Nom de la declaration (ex: Impots 2025)" />
+                    <button id="new-session-btn" class="btn-primary">Nouvelle declaration</button>
                 </div>
             </div>
         </div>

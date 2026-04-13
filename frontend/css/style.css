@@ -41,7 +41,7 @@ html, body {
 .header {
     background: linear-gradient(135deg, var(--primary), var(--primary-light));
     color: white;
-    padding: 16px 24px;
+    padding: 14px 24px;
     box-shadow: var(--shadow);
     z-index: 10;
 }
@@ -50,23 +50,7 @@ html, body {
     display: flex;
     align-items: center;
     gap: 16px;
-}
-
-.logo {
-    width: 56px;
-    height: 56px;
-    border-radius: 12px;
-    overflow: hidden;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-}
-
-.logo img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
+    flex-wrap: wrap;
 }
 
 .header h1 {
@@ -90,23 +74,46 @@ html, body {
     opacity: 0.8;
 }
 
+.header-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
 .header-btn {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 6px 14px;
-    background: rgba(255, 255, 255, 0.15);
+    padding: 7px 14px;
     color: white;
     text-decoration: none;
     border-radius: 8px;
     font-size: 13px;
     font-weight: 600;
-    transition: background 0.2s;
+    transition: transform 0.15s, box-shadow 0.15s;
     white-space: nowrap;
 }
 
 .header-btn:hover {
-    background: rgba(255, 255, 255, 0.3);
+    transform: translateY(-1px);
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.25);
+}
+
+.btn-reference {
+    background: #e67e22;
+}
+
+.btn-reference:hover {
+    background: #d35400;
+}
+
+.btn-status {
+    background: #27ae60;
+}
+
+.btn-status:hover {
+    background: #1e8449;
 }
 
 .status-badge {
@@ -149,9 +156,30 @@ html, body {
     flex: 1;
     overflow-y: auto;
     padding: 24px;
+    background-image: url('/img/agent-impots.png');
+    background-repeat: no-repeat;
+    background-position: center center;
+    background-size: 300px;
+    background-attachment: local;
+    position: relative;
+}
+
+/* Fond semi-transparent pour que le texte reste lisible par-dessus l'image */
+.chat-container::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(240, 242, 245, 0.85);
+    pointer-events: none;
+    z-index: 0;
 }
 
 .chat-messages {
+    position: relative;
+    z-index: 1;
     display: flex;
     flex-direction: column;
     gap: 16px;
