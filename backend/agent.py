@@ -89,14 +89,24 @@ class AgentFiscal:
         self._restore_state()
 
     def _restore_state(self):
-        """Restaure l'état depuis la mémoire persistante."""
+        """Restaure l'etat depuis la memoire persistante."""
         if self.store and not self.store.is_new():
             self.state = self.store.get("state", STATE_WELCOME)
             self.documents_path = self.store.get("documents_path", "")
             self.conversation_history = self.store.get_history()
             self.pending_questions = self.store.get("pending_questions", [])
             self.current_question_index = self.store.get("current_question_index", 0)
-            print(f"[SESSION] Restaurée : état={self.state}, profil complétude={self.profile.get_completeness():.0%}")
+
+            # Verifier s'il reste des documents non extraits
+            # Si oui, forcer l'etat a "ingestion" pour reprendre
+            if self.documents_path and self.state not in (STATE_WELCOME, STATE_DONE):
+                remaining = self._count_remaining_docs()
+                if remaining > 0:
+                    print(f"[SESSION] {remaining} documents non extraits detectes, forcage etat -> ingestion")
+                    self.state = STATE_INGESTION
+                    self.store.set("state", STATE_INGESTION)
+
+            print(f"[SESSION] Restauree : etat={self.state}, profil completude={self.profile.get_completeness():.0%}")
         else:
             self.state = STATE_WELCOME
             self.documents_path = ""
@@ -105,6 +115,18 @@ class AgentFiscal:
             self.current_question_index = 0
             if self.store:
                 self.store.init_session()
+
+    def _count_remaining_docs(self) -> int:
+        """Compte les documents dans le dossier qui n'ont pas encore ete extraits."""
+        if not self.documents_path:
+            return 0
+        folder = Path(self.documents_path)
+        if not folder.exists():
+            return 0
+        supported_ext = {".pdf", ".png", ".jpg", ".jpeg", ".tiff", ".bmp", ".xlsx", ".xls", ".csv", ".docx", ".txt"}
+        all_files = {f.name for f in folder.rglob("*") if f.is_file() and f.suffix.lower() in supported_ext}
+        already_done = {e.get("doc_id") for e in self.extractions.get_all()} if self.extractions else set()
+        return len(all_files - already_done)
 
     def _persist(self):
         """Sauvegarde l'état courant."""
@@ -997,8 +1019,9 @@ class AgentFiscal:
         msg = "**Session reprise**\n\n"
 
         if self.state == STATE_INGESTION:
-            msg += f"{already_extracted} document(s) deja analyse(s).\n\n"
-            msg += "Tapez **ok** pour reprendre l'analyse des documents restants."
+            remaining = self._count_remaining_docs()
+            msg += f"{already_extracted} document(s) deja analyse(s), **{remaining} restant(s)**.\n\n"
+            msg += "Tapez **ok** pour reprendre l'analyse et lancer le calcul."
 
         elif self.state == STATE_PARALLEL:
             q_done = self.current_question_index
