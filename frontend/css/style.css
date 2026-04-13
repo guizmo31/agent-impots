@@ -640,6 +640,17 @@ textarea:disabled {
     width: 100%;
 }
 
+.disclaimer-banner {
+    background: #e74c3c;
+    color: white;
+    padding: 14px 18px;
+    border-radius: 10px;
+    font-size: 14px;
+    line-height: 1.5;
+    margin-bottom: 20px;
+    font-weight: 500;
+}
+
 .session-picker-content h2 {
     color: var(--primary);
     font-size: 24px;
