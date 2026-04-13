@@ -40,15 +40,41 @@ html, body {
     flex-shrink: 0;
     background: linear-gradient(180deg, #1e3a5f 0%, #15293f 100%);
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
     padding: 20px;
+    gap: 20px;
 }
 
 .sidebar-img {
     width: 100%;
     object-fit: contain;
     border-radius: 12px;
+}
+
+.sidebar-ref-btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: #e67e22;
+    color: white;
+    text-decoration: none;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.4;
+    width: 100%;
+    transition: background 0.2s;
+}
+
+.sidebar-ref-btn:hover {
+    background: #d35400;
+}
+
+.sidebar-ref-btn svg {
+    flex-shrink: 0;
 }
 
 .main-col {
@@ -64,10 +90,17 @@ html, body {
     }
     .sidebar {
         width: 100%;
+        flex-direction: row;
         padding: 12px;
+        gap: 10px;
+        justify-content: flex-start;
     }
     .sidebar-img {
-        width: 60px;
+        width: 50px;
+    }
+    .sidebar-ref-btn {
+        font-size: 11px;
+        padding: 6px 10px;
     }
 }
 
