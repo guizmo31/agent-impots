@@ -125,7 +125,8 @@ class MarkdownConverter:
     # ------------------------------------------------------------------
 
     def _pdf_to_md(self, path: Path) -> str:
-        """PDF -> Markdown avec structure par pages."""
+        """PDF -> Markdown avec structure par pages.
+        L'OCR n'est tente que si Tesseract est disponible, et a DPI reduit."""
         import fitz  # PyMuPDF
 
         parts = [f"# {path.name}\n"]
@@ -134,26 +135,42 @@ class MarkdownConverter:
             for page_num, page in enumerate(doc, 1):
                 page_text = page.get_text()
 
-                if not page_text.strip():
-                    # Page sans texte -> OCR
-                    pix = page.get_pixmap(dpi=200)
-                    img_data = pix.tobytes("png")
-                    page_text = self._ocr_bytes(img_data)
-                    if page_text.strip():
-                        parts.append(f"## Page {page_num} (OCR)\n")
-                    else:
-                        parts.append(f"## Page {page_num}\n\n*Page vide ou illisible*\n")
-                        continue
-                else:
+                if page_text.strip():
                     parts.append(f"## Page {page_num}\n")
+                else:
+                    # Page sans texte -> tenter OCR (rapide, 150 DPI)
+                    if self._tesseract_available():
+                        pix = page.get_pixmap(dpi=150)
+                        img_data = pix.tobytes("png")
+                        page_text = self._ocr_bytes(img_data)
+                        if page_text.strip():
+                            parts.append(f"## Page {page_num} (OCR)\n")
+                        else:
+                            parts.append(f"## Page {page_num}\n\n*Page image non lisible par OCR*\n")
+                            continue
+                    else:
+                        parts.append(f"## Page {page_num}\n\n*Page image (OCR non disponible)*\n")
+                        continue
 
-                # Nettoyer et structurer le texte
                 cleaned = self._clean_text(page_text)
-                # Detecter les lignes qui ressemblent a des montants (tableaux)
                 structured = self._structure_fiscal_text(cleaned)
                 parts.append(structured + "\n")
 
         return "\n".join(parts)
+
+    _tesseract_ok: bool | None = None
+
+    def _tesseract_available(self) -> bool:
+        """Verifie une seule fois si Tesseract est installe."""
+        if MarkdownConverter._tesseract_ok is None:
+            try:
+                import pytesseract
+                pytesseract.get_tesseract_version()
+                MarkdownConverter._tesseract_ok = True
+            except Exception:
+                MarkdownConverter._tesseract_ok = False
+                print("[MD] Tesseract OCR non disponible -- les pages images seront ignorees")
+        return MarkdownConverter._tesseract_ok
 
     def _image_to_md(self, path: Path) -> str:
         """Image -> Markdown via OCR."""
