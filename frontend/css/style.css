@@ -626,16 +626,17 @@ textarea:disabled {
 .session-card {
     display: flex;
     align-items: center;
-    background: var(--surface);
-    border: 1px solid var(--border);
+    background: #e8f0fe;
+    border: 1px solid #b8d4f0;
     border-radius: 12px;
     overflow: hidden;
-    transition: border-color 0.2s, box-shadow 0.2s;
+    transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
 }
 
 .session-card:hover {
+    background: #d4e6fa;
     border-color: var(--primary-light);
-    box-shadow: 0 2px 8px rgba(41, 128, 185, 0.15);
+    box-shadow: 0 2px 8px rgba(41, 128, 185, 0.2);
 }
 
 .session-card-main {
