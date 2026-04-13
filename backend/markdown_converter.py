@@ -37,6 +37,28 @@ class MarkdownConverter:
             return None
 
         ext = path.suffix.lower()
+        md_filename = path.stem + ".md"
+        md_path = self.md_dir / md_filename
+
+        # Cache : reutiliser le markdown existant si le fichier source n'a pas change
+        if md_path.exists():
+            source_mtime = path.stat().st_mtime
+            md_mtime = md_path.stat().st_mtime
+            if md_mtime >= source_mtime:
+                # Le markdown est plus recent que le fichier source -> cache valide
+                md_content = md_path.read_text(encoding="utf-8")
+                if md_content.strip():
+                    print(f"[MD] Cache hit : {path.name} -> {md_filename}")
+                    return {
+                        "filename": path.name,
+                        "md_path": str(md_path),
+                        "md_filename": md_filename,
+                        "content": md_content,
+                        "size_bytes": path.stat().st_size,
+                        "extension": ext,
+                        "cached": True,
+                    }
+
         md_content = ""
 
         try:
@@ -69,9 +91,8 @@ class MarkdownConverter:
         md_content = header + md_content
 
         # Sauvegarder le markdown sur disque
-        md_filename = path.stem + ".md"
-        md_path = self.md_dir / md_filename
         md_path.write_text(md_content, encoding="utf-8")
+        print(f"[MD] Converti : {path.name} -> {md_filename} ({len(md_content)} chars)")
 
         return {
             "filename": path.name,
@@ -80,6 +101,7 @@ class MarkdownConverter:
             "content": md_content,
             "size_bytes": path.stat().st_size,
             "extension": ext,
+            "cached": False,
         }
 
     def get_all_markdowns(self) -> list[dict]:
