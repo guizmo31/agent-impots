@@ -127,7 +127,7 @@ pre {{ font-size:13px; line-height:1.6; white-space:pre-wrap; word-wrap:break-wo
 <div class="main-col">
 <div class="topbar">
     <h1>Documents convertis ({len(markdowns)} fichiers)</h1>
-    <a href="/">Retour a l'agent</a>
+    <a href="javascript:window.close()" onclick="window.close(); return false;">Fermer et revenir a l'agent</a>
 </div>
 <div class="content">
 <div class="info">

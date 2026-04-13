@@ -276,7 +276,7 @@ th {{ background:#f0f4f8; font-weight:600; color:#1e3a5f; }}
         <div class="meta">{meta.get('source', 'Declaration des revenus')} | {meta.get('annee_revenus', '?')}</div>
     </div>
     <input type="text" class="search-box" id="search" placeholder="Rechercher une case, un mot-cle... (ex: 1AJ, RSU, LMNP, dividendes)" autofocus>
-    <a href="/" class="back-link">Retour a l'agent</a>
+    <a href="javascript:window.close()" class="back-link" onclick="window.close(); return false;">Fermer et revenir a l'agent</a>
 </div>
 </div>
 
