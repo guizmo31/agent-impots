@@ -118,7 +118,7 @@ FastAPI (backend Python)                                   <- 100% local
     |   |       -> Sauvegarde immediate sur disque (survit a un crash)
     |   |
     |   '-- 1d. Construction du profil fiscal
-    |           ExtractionStore (RAG local) -> FiscalProfile (JSON source de verite)
+    |           ExtractionStore -> FiscalProfile (JSON source de verite)
     |
     |   [En parallele : l'utilisateur repond aux questions structurantes]
     |
@@ -128,8 +128,10 @@ FastAPI (backend Python)                                   <- 100% local
     |   -> Reponses structurees localement (pattern matching, LLM en fallback)
     |
     |-- Etape 3 : CALCUL (75% -> 95% completion)
-    |   RAG fiscal (regles, bareme, 145 cases 2042) + profil JSON
-    |   -> Le LLM recoit UNIQUEMENT le profil, jamais les documents bruts
+    |   Base fiscale COMPLETE injectee directement dans le prompt
+    |   (~47K chars = ~12K tokens, soit 15% de la fenetre de 128K)
+    |   + profil JSON du contribuable
+    |   -> Le LLM voit TOUTES les regles et cases (pas de top-K approximatif)
     |   -> Cases 2042 avec montants et justifications
     |
     |-- Etape 4 : VERIFICATION (95% -> 100% completion)
@@ -143,18 +145,25 @@ FastAPI (backend Python)                                   <- 100% local
     v
 Ollama (100% local)
     |-- Mistral-Nemo 12B (~7 Go) -- LLM principal (128K contexte, excellent en francais)
-    |-- Mistral 7B (~4 Go) -- modele de secours (si RAM insuffisante)
-    '-- nomic-embed-text (~270 Mo) -- embeddings pour les deux RAG locaux
+    '-- Mistral 7B (~4 Go) -- modele de secours (si RAM insuffisante)
 ```
+
+### Injection directe vs RAG
+
+L'agent n'utilise **pas de RAG** (Retrieval-Augmented Generation). A la place, la base de connaissances fiscales (~47 000 chars = ~12 000 tokens) est injectee **integralement** dans chaque prompt. C'est possible grace a la fenetre de contexte de 128K tokens de Mistral-Nemo.
+
+| | RAG (ancien) | Injection directe (actuel) |
+|---|---|---|
+| Startup | ~30s (generation embeddings) | **instantane** |
+| Chaque requete | +2s (recherche semantique) | **0s** |
+| Fiabilite | Top-K peut rater des regles | **Le LLM voit TOUT** |
+| Modele supplementaire | nomic-embed-text (270 Mo) | **aucun** |
+| Budget tokens (etape calcul) | ~13K / 128K (10%) | ~19K / 128K (15%) |
 
 **Trois pages web** (toutes locales) :
 - **Agent** (`/`) : interface de chat avec barre de progression et pourcentage de completion
-- **Documents** (`/documents`) : visualisation des markdowns generes (verification du contenu)
+- **Documents** (`/documents`) : visualisation des markdowns generes (verification du contenu extrait)
 - **Reference fiscale** (`/reference`) : guide interactif des 145 cases 2042 avec exemples concrets
-
-**Deux RAG locaux** (aucun cloud) :
-- **RAG fiscal** : regles fiscales, ~145 cases 2042, bareme IR, articles CGI
-- **RAG extractions** : donnees structurees extraites de VOS documents
 
 ---
 
@@ -201,7 +210,6 @@ Ce script va automatiquement :
 2. Detecter Ollama (cherche dans le PATH et les emplacements classiques)
 3. Telecharger **Mistral-Nemo 12B** (~7 Go) -- le LLM principal, excellent en francais et en JSON
 4. Telecharger **Mistral 7B** (~4 Go) -- modele de secours
-5. Telecharger **nomic-embed-text** (~270 Mo) -- pour les embeddings des RAG locaux
 
 > Le telechargement des modeles peut prendre 10-20 minutes selon votre connexion. C'est la seule fois ou une connexion internet est necessaire -- ensuite tout fonctionne hors ligne.
 
@@ -366,9 +374,9 @@ agent-impots/
 |   |-- ollama_client.py            <- Client Ollama (detection auto du meilleur modele)
 |   |-- markdown_converter.py       <- Conversion universelle -> Markdown
 |   |-- extractors.py               <- Extracteur universel de donnees fiscales
-|   |-- extraction_store.py         <- RAG local des extractions du contribuable
+|   |-- extraction_store.py         <- Store persistant des extractions du contribuable
 |   |-- fiscal_profile.py           <- Profil fiscal JSON (source de verite)
-|   |-- rag.py                      <- RAG fiscal (regles, cases, bareme)
+|   |-- fiscal_knowledge.py          <- Base fiscale (injection directe, pas de RAG)
 |   |-- sanitizer.py                <- Protection anti-prompt-injection
 |   |-- document_parser.py          <- Parsing multi-format + OCR (fallback)
 |   |-- fiscal_engine.py            <- Moteur de calcul fiscal (bareme IR)
@@ -394,7 +402,7 @@ Les connaissances fiscales sont dans `data/`. Pour mettre a jour quand un nouvea
 
 1. Modifier `data/cases_2042_2026.json` -- cases, seuils, taux
 2. Modifier `data/regles_fiscales.md` -- regles, explications
-3. Ajouter des fichiers `.md` ou `.txt` dans `data/` -- indexes automatiquement par le RAG local
+3. Ajouter des fichiers `.md` ou `.txt` dans `data/` -- charges automatiquement au demarrage
 4. Supprimer `data/.cache/` pour forcer la regeneration des embeddings locaux
 
 ## Configuration materielle recommandee
