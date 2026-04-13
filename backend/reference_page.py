@@ -13,6 +13,97 @@ from pathlib import Path
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
+# Exemples concrets pour les cases les plus courantes
+EXEMPLES = {
+    "1AJ": "Vous etes salarie chez Renault avec un salaire net imposable annuel de 42 000 EUR (visible sur votre bulletin de paie de decembre, ligne 'Cumul net imposable'). Inscrivez 42 000 en case 1AJ.",
+    "1BJ": "Votre conjoint(e) travaille chez Airbus avec un net imposable de 38 000 EUR/an. Inscrivez 38 000 en case 1BJ.",
+    "1AK": "Vous avez fait 200h supplementaires dans l'annee, exonerees a hauteur de 5 000 EUR. Inscrivez 5 000 en case 1AK. Ce montant n'est pas ajoute au revenu imposable.",
+    "1GB": "Vous etes gerant majoritaire de votre SARL et vous versez 36 000 EUR/an de remuneration. Inscrivez 36 000 en case 1GB (pas en 1AJ car article 62 du CGI).",
+    "1AS": "Vous percevez une retraite CNAV de 1 500 EUR/mois soit 18 000 EUR/an. Inscrivez 18 000 en case 1AS. Un abattement de 10% sera applique automatiquement (min 422 EUR, max 4 123 EUR).",
+    "1TZ": "Vous avez recu 200 actions gratuites (RSU) de votre employeur americain. Valeur a l'acquisition : 50 EUR/action, soit un gain de 10 000 EUR. Comme c'est < 300 000 EUR, inscrivez 10 000 en case 1TZ (abattement de 50% applique, soit 5 000 EUR imposable).",
+    "1TT": "Vous avez leve vos stock-options : prix d'exercice 20 EUR, valeur a la levee 45 EUR, 500 actions. Gain de levee = (45-20) x 500 = 12 500 EUR. Inscrivez 12 500 en case 1TT.",
+    "2DC": "Votre SASU vous a verse 8 000 EUR de dividendes. Inscrivez 8 000 en case 2DC. Par defaut, le PFU de 30% s'applique (2 400 EUR d'impot). Si vous cochez 2OP, l'abattement de 40% s'applique et seuls 4 800 EUR sont ajoutes a vos revenus.",
+    "2TR": "Votre livret bancaire imposable vous a rapporte 350 EUR d'interets. Inscrivez 350 en case 2TR.",
+    "2OP": "Vous avez des dividendes de 8 000 EUR et une TMI de 11%. Cochez 2OP : avec l'abattement de 40%, seuls 4 800 EUR sont imposes a 11% = 528 EUR (au lieu de 1 024 EUR au PFU). Economie : 496 EUR.",
+    "2CK": "Votre banque a deja preleve un acompte de 12,8% sur vos 350 EUR d'interets = 44,80 EUR. Inscrivez 44,80 en case 2CK. Ce montant sera deduit de votre impot final.",
+    "3VG": "Vous avez vendu des actions pour 15 000 EUR achetees 10 000 EUR. Plus-value = 5 000 EUR. Inscrivez 5 000 en case 3VG. PFU 30% = 1 500 EUR d'impot (ou option bareme si plus avantageux).",
+    "3VH": "Vous avez vendu des actions a perte : achetees 8 000 EUR, vendues 5 000 EUR. Moins-value = 3 000 EUR. Inscrivez 3 000 en case 3VH. Reportable 10 ans sur vos futures plus-values.",
+    "3VT": "Vous avez vendu du Bitcoin pour 2 000 EUR de plus-value (total cessions > 305 EUR dans l'annee). Inscrivez 2 000 en case 3VT. PFU 30% = 600 EUR.",
+    "4BA": "Vous louez un appartement nu a Toulouse : 800 EUR/mois de loyer. Charges deductibles : interets emprunt 2 400 EUR + taxe fonciere 1 200 EUR + assurance 300 EUR + travaux 1 500 EUR = 5 400 EUR. Revenu foncier net = 9 600 - 5 400 = 4 200 EUR. Inscrivez 4 200 en case 4BA.",
+    "4BE": "Vous louez un studio nu : 600 EUR/mois soit 7 200 EUR/an de loyers bruts (< 15 000 EUR). Inscrivez 7 200 en case 4BE. L'abattement de 30% est automatique, vous serez impose sur 5 040 EUR.",
+    "4BF": "Vos charges deductibles (12 000 EUR) depassent vos loyers (9 600 EUR) : deficit foncier de 2 400 EUR. Inscrivez 2 400 en case 4BF. Ce montant se deduit de votre revenu global (plafond 10 700 EUR).",
+    "5ND": "Vous louez un appartement meuble a l'annee : 900 EUR/mois soit 10 800 EUR de recettes. Inscrivez 10 800 en case 5ND (micro-BIC, abattement 50% automatique, impose sur 5 400 EUR).",
+    "5NG": "Vous louez un gite classe 'meuble de tourisme' : 15 000 EUR de recettes. Inscrivez 15 000 en case 5NG (micro-BIC, abattement 71%, impose sur seulement 4 350 EUR).",
+    "5NJ": "Vous louez votre appartement sur Airbnb (non classe) : 8 000 EUR de recettes. Inscrivez 8 000 en case 5NJ (micro-BIC, abattement 50%, impose sur 4 000 EUR).",
+    "5KO": "Vous etes auto-entrepreneur en vente de marchandises : CA de 45 000 EUR. Inscrivez 45 000 en case 5KO. Abattement 71% automatique, impose sur 13 050 EUR.",
+    "5KP": "Vous etes auto-entrepreneur en prestation de services : CA de 30 000 EUR. Inscrivez 30 000 en case 5KP. Abattement 50%, impose sur 15 000 EUR.",
+    "5HQ": "Vous exercez en liberal (BNC) en micro : 25 000 EUR de recettes. Inscrivez 25 000 en case 5HQ. Abattement 34%, impose sur 16 500 EUR.",
+    "6GU": "Votre fils majeur (22 ans, non rattache) est etudiant. Vous lui versez 500 EUR/mois = 6 000 EUR/an. Inscrivez 6 000 en case 6GU (plafond 6 674 EUR). Votre fils doit declarer 6 000 EUR de son cote.",
+    "6GI": "Votre mere agee vit chez vous. Vous la nourrissez et l'hebergez : deduction forfaitaire de 3 968 EUR (sans justificatif). Vous payez aussi ses frais medicaux : 1 500 EUR. Inscrivez 5 468 EUR en case 6GI.",
+    "6NS": "Vous avez verse 4 000 EUR sur votre PER (Plan Epargne Retraite). Inscrivez 4 000 en case 6NS. Ce montant se deduit de votre revenu imposable. Si votre TMI est 30%, economie d'impot = 1 200 EUR.",
+    "7UF": "Vous avez donne 500 EUR a une association d'interet general (Restos du Coeur, Croix-Rouge...). Inscrivez 500 en case 7UF. Reduction d'impot = 66% x 500 = 330 EUR.",
+    "7UD": "Vous avez donne 200 EUR a une association d'aide aux personnes en difficulte. Inscrivez 200 en case 7UD. Reduction = 75% x 200 = 150 EUR (plafond 1 000 EUR pour le taux de 75%).",
+    "7DB": "Vous employez une femme de menage 4h/semaine a 15 EUR/h = 3 120 EUR/an. Inscrivez 3 120 en case 7DB. Credit d'impot = 50% x 3 120 = 1 560 EUR (plafond 12 000 EUR).",
+    "7GA": "Vous payez la creche pour votre enfant de 3 ans : 3 000 EUR/an (apres deduction du complement CAF). Inscrivez 3 000 en case 7GA. Credit d'impot = 50% x 3 000 = 1 500 EUR (plafond 3 500 EUR).",
+    "7EA": "Votre enfant est au college. Inscrivez 1 en case 7EA. Reduction = 61 EUR.",
+    "7EC": "Votre enfant est au lycee. Inscrivez 1 en case 7EC. Reduction = 153 EUR.",
+    "7EF": "Votre enfant est etudiant a l'universite. Inscrivez 1 en case 7EF. Reduction = 183 EUR.",
+    "7CD": "Votre parent est en EHPAD : 2 500 EUR/mois dont 1 800 EUR d'hebergement et dependance (hors soins). Sur l'annee : 21 600 EUR. Inscrivez 10 000 EUR en case 7CD (plafond). Reduction = 25% x 10 000 = 2 500 EUR.",
+    "8HV": "Votre employeur a retenu 4 200 EUR de prelevement a la source durant l'annee (visible sur chaque bulletin de paie). Ce montant est pre-rempli en case 8HV et sera deduit de votre impot final.",
+    "0CF": "Vous avez 2 enfants mineurs. Inscrivez 2 en case 0CF. Cela vous donne +0,5 part (1er enfant) +0,5 part (2eme enfant) = +1 part supplementaire.",
+    "T": "Vous etes divorc(e) et vivez seul(e) avec vos 2 enfants. Cochez la case T. Au lieu de 1 + 0,5 + 0,5 = 2 parts, vous aurez 1 + 1 + 0,5 = 2,5 parts (le 1er enfant compte pour 1 part entiere).",
+    "L": "Vous avez 60 ans, vous vivez seul(e) et vous avez eleve votre fils pendant 15 ans (il est maintenant adulte independant). Cochez la case L. Vous beneficiez d'une demi-part supplementaire (avantage plafonne a 1 050 EUR).",
+    "P": "Vous etes titulaire de la carte mobilite inclusion (CMI) mention invalidite (taux >= 80%). Cochez la case P pour beneficier d'une demi-part supplementaire.",
+    "2TS": "Votre SCPI Corum vous a distribue 1 200 EUR de revenus financiers (indiques sur l'IFU). Inscrivez 1 200 en case 2TS.",
+    "9HI": "Vous possedez votre residence principale (estimee 400 000 EUR, abattement 30% = 280 000 EUR), un appartement locatif (250 000 EUR) et des parts de SCPI (80 000 EUR). Total brut = 610 000 EUR. Dettes : pret restant 180 000 EUR. Net = 430 000 EUR. C'est < 1 300 000 EUR, vous n'etes pas assujetti a l'IFI.",
+}
+
+# Exemples de calcul pour le bareme
+EXEMPLES_BAREME = [
+    {
+        "titre": "Celibataire, 30 000 EUR de salaire",
+        "etapes": [
+            "Salaire net imposable : 30 000 EUR",
+            "Abattement 10% : 3 000 EUR",
+            "Revenu net imposable : 27 000 EUR",
+            "1 part fiscale (celibataire sans enfant)",
+            "Quotient familial : 27 000 / 1 = 27 000 EUR",
+            "Tranche 0% : 11 497 x 0% = 0 EUR",
+            "Tranche 11% : (27 000 - 11 497) x 11% = 1 705 EUR",
+            "Impot brut = 1 705 EUR",
+        ],
+    },
+    {
+        "titre": "Couple marie, 2 enfants, 60 000 EUR de salaires",
+        "etapes": [
+            "Salaires : declarant 1 = 35 000 EUR, declarant 2 = 25 000 EUR",
+            "Total brut : 60 000 EUR",
+            "Abattement 10% : 6 000 EUR",
+            "Revenu net imposable : 54 000 EUR",
+            "3 parts fiscales (2 adultes + 0,5 + 0,5 enfants)",
+            "Quotient familial : 54 000 / 3 = 18 000 EUR",
+            "Tranche 0% : 11 497 x 0% = 0 EUR",
+            "Tranche 11% : (18 000 - 11 497) x 11% = 715 EUR",
+            "Impot par part = 715 EUR",
+            "Impot brut = 715 x 3 = 2 146 EUR",
+            "PAS deja paye : 5 000 EUR -> Remboursement de 2 854 EUR",
+        ],
+    },
+    {
+        "titre": "Celibataire avec appartement Airbnb",
+        "etapes": [
+            "Salaire net imposable : 40 000 EUR (case 1AJ)",
+            "Location Airbnb non classee : 8 000 EUR (case 5NJ, micro-BIC abattement 50%)",
+            "Revenu Airbnb apres abattement : 4 000 EUR",
+            "Total revenus : 40 000 + 4 000 = 44 000 EUR",
+            "Abattement 10% sur salaires : 4 000 EUR",
+            "Revenu net imposable : 40 000 EUR",
+            "QF : 40 000 / 1 = 40 000 EUR",
+            "Impot brut : 0 + 1 960 + (40 000 - 29 315) x 30% = 1 960 + 3 206 = 5 166 EUR",
+        ],
+    },
+]
+
 
 def generate_reference_html() -> str:
     """Genere la page HTML de reference fiscale."""
@@ -129,6 +220,22 @@ th {{ background:#f0f4f8; font-weight:600; color:#1e3a5f; }}
     border-radius:10px; font-size:12px; color:#555; margin-left:6px;
 }}
 
+.case-exemple {{
+    background:#f0faf4; border-left:3px solid #27ae60;
+    padding:8px 12px; margin-top:8px; border-radius:0 6px 6px 0;
+    font-size:13px; color:#2c3e50; line-height:1.5;
+}}
+.case-exemple strong {{ color:#27ae60; }}
+
+.exemple-calcul {{
+    background:#f8fafc; border:1px solid #e8ecf1; border-radius:8px;
+    padding:14px; margin-bottom:12px;
+}}
+.exemple-calcul h4 {{ color:#2980b9; margin-bottom:8px; font-size:14px; }}
+.exemple-calcul ol {{ padding-left:20px; font-size:13px; }}
+.exemple-calcul li {{ margin-bottom:3px; }}
+.exemple-calcul li.highlight {{ background:#fff8e1; font-weight:bold; padding:2px 4px; border-radius:3px; }}
+
 .no-results {{
     text-align:center; padding:40px; color:#95a5a6; font-size:16px;
     display:none;
@@ -228,6 +335,15 @@ def _render_bareme(bareme: dict) -> str:
             html += f"<tr><td>De {t['min']:,.0f} EUR a {max_val}</td><td><strong>{t['taux']*100:.0f}%</strong></td></tr>"
         html += "</tbody></table>"
 
+    # Exemples de calcul concrets
+    html += "<h3>Exemples de calcul concrets</h3>"
+    for ex in EXEMPLES_BAREME:
+        html += f'<div class="exemple-calcul"><h4>{ex["titre"]}</h4><ol>'
+        for etape in ex["etapes"]:
+            css = ' class="highlight"' if etape.startswith("Impot") or "Remboursement" in etape else ""
+            html += f"<li{css}>{etape}</li>"
+        html += "</ol></div>"
+
     abat = bareme.get("abattement_10pct", {})
     if abat:
         html += f"<h3>Abattement forfaitaire de 10%</h3><p>{abat.get('description', '')} (min {abat.get('minimum', '?')} EUR, max {abat.get('maximum', '?')} EUR)</p>"
@@ -308,12 +424,19 @@ def _render_case_card(case_id: str, info: dict) -> str:
     if extras:
         extras_html = '<div class="case-meta">' + " | ".join(extras) + "</div>"
 
+    # Exemple concret
+    exemple = EXEMPLES.get(case_id, EXEMPLES.get(case_display, ""))
+    exemple_html = ""
+    if exemple:
+        exemple_html = f'<div class="case-exemple"><strong>Exemple :</strong> {exemple}</div>'
+
     return (
         f'<div class="case-card" data-search="{search_text}">'
         f'<div class="case-header"><span class="case-num">{case_display}</span>'
         f'<span class="case-label">{libelle}</span></div>'
         f'{"<div class=case-desc>" + description + "</div>" if description and description != libelle else ""}'
         f'{extras_html}'
+        f'{exemple_html}'
         f'{"<div class=case-meta>" + " ".join(meta_parts) + "</div>" if meta_parts else ""}'
         f'</div>'
     )
