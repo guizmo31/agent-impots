@@ -893,6 +893,37 @@ class AgentFiscal:
         response = await query_llm(prompt, SYSTEM_PROMPT, temperature=0.1, max_tokens=500)
         return _parse_json(response)
 
+    def _parse_enfants(self, text: str) -> dict:
+        """Parse le nombre d'enfants depuis une reponse libre.
+        Gere : '2 enfants', '1 mineur et 1 majeur', '1 enfant mineur, 1 majeur rattache', etc."""
+        a = text.lower()
+        result = {}
+
+        # Pattern : "X mineur(s)" et/ou "Y majeur(s)"
+        mineurs_match = re.search(r"(\d+)\s*(?:enfant\w*)?\s*mineur", a)
+        majeurs_match = re.search(r"(\d+)\s*(?:enfant\w*)?\s*majeur", a)
+        alternee_match = re.search(r"(\d+)\s*(?:enfant\w*)?\s*(?:residence\s*)?altern", a)
+
+        if mineurs_match:
+            result["nb_enfants_mineurs"] = int(mineurs_match.group(1))
+        if majeurs_match:
+            result["nb_enfants_majeurs_rattaches"] = int(majeurs_match.group(1))
+        if alternee_match:
+            result["nb_enfants_residence_alternee"] = int(alternee_match.group(1))
+
+        # Si on a trouve mineur et/ou majeur, c'est suffisant
+        if result:
+            return result
+
+        # Sinon, pattern generique : "X enfant(s)" -> on met tout en mineurs par defaut
+        nb = re.search(r"(\d+)\s*enfant", a)
+        if nb:
+            total = int(nb.group(1))
+            result["nb_enfants_mineurs"] = total
+            return result
+
+        return result
+
     def _structure_answer_local(self, question: str, answer: str) -> dict | None:
         """Pattern matching local pour les reponses courantes (instantane)."""
         q = question.lower()
@@ -911,20 +942,18 @@ class AgentFiscal:
                 result["foyer"]["situation"] = "veuf"
             elif any(w in a for w in ("celibataire", "célibataire", "seul")):
                 result["foyer"]["situation"] = "celibataire"
-            # Chercher le nombre d'enfants dans la meme reponse
-            nb = re.search(r"(\d+)\s*enfant", a)
-            if nb:
-                result["foyer"]["nb_enfants_mineurs"] = int(nb.group(1))
+            # Chercher les enfants dans la meme reponse
+            result["foyer"].update(self._parse_enfants(a))
             if result["foyer"]:
                 return result
 
         # --- Nombre d'enfants ---
         if "enfant" in q:
-            nb = re.search(r"(\d+)", a)
-            if nb:
-                return {"foyer": {"nb_enfants_mineurs": int(nb.group(1))}}
+            parsed = self._parse_enfants(a)
+            if parsed:
+                return {"foyer": parsed}
             if any(w in a for w in ("aucun", "pas d", "0", "non", "zero")):
-                return {"foyer": {"nb_enfants_mineurs": 0}}
+                return {"foyer": {"nb_enfants_mineurs": 0, "nb_enfants_majeurs_rattaches": 0}}
 
         # --- Frais reels ---
         if "frais" in q and "reel" in q:

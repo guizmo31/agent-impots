@@ -155,6 +155,8 @@ class FiscalProfile:
     def save(self):
         self.data["meta"]["updated_at"] = datetime.now().isoformat()
         self.data["meta"]["completude"] = self._compute_completeness()
+        # Recalculer automatiquement le nombre de parts
+        self._recalculate_parts()
         self.filepath.write_text(
             json.dumps(self.data, indent=2, ensure_ascii=False, default=str),
             encoding="utf-8",
@@ -290,6 +292,77 @@ class FiscalProfile:
                 if v != 0:
                     result[k] = v
         return result
+
+    def _recalculate_parts(self):
+        """Recalcule automatiquement le nombre de parts fiscales depuis le foyer."""
+        foyer = self.data.get("foyer", {})
+        situation = foyer.get("situation", "")
+        if not situation:
+            return  # Pas assez d'info pour calculer
+
+        # Base
+        if situation in ("marie", "pacse"):
+            parts = 2.0
+        else:
+            parts = 1.0
+
+        # Enfants mineurs
+        nb_mineurs = foyer.get("nb_enfants_mineurs", 0)
+        # Enfants majeurs rattaches
+        nb_majeurs = foyer.get("nb_enfants_majeurs_rattaches", 0)
+        # Enfants residence alternee (comptent pour moitie)
+        nb_alternee = foyer.get("nb_enfants_residence_alternee", 0)
+
+        total_enfants_pleins = nb_mineurs + nb_majeurs
+        total_enfants_demi = nb_alternee
+
+        # Parts enfants pleins
+        if total_enfants_pleins >= 1:
+            parts += 0.5
+        if total_enfants_pleins >= 2:
+            parts += 0.5
+        if total_enfants_pleins >= 3:
+            parts += (total_enfants_pleins - 2) * 1.0
+
+        # Parts enfants residence alternee (moitie)
+        if total_enfants_demi >= 1:
+            parts += 0.25
+        if total_enfants_demi >= 2:
+            parts += 0.25
+        if total_enfants_demi >= 3:
+            parts += (total_enfants_demi - 2) * 0.5
+
+        # Enfants handicapes
+        nb_handicapes = foyer.get("nb_enfants_handicapes", 0)
+        parts += nb_handicapes * 0.5
+
+        # Parent isole
+        if foyer.get("parent_isole"):
+            parts += 0.5
+
+        # Invalidite declarant
+        if foyer.get("invalidite_declarant1"):
+            parts += 0.5
+        if foyer.get("invalidite_declarant2"):
+            parts += 0.5
+
+        foyer["nb_parts"] = parts
+
+        # Generer le detail
+        detail = []
+        if situation in ("marie", "pacse"):
+            detail.append("2 (couple)")
+        else:
+            detail.append("1 (celibataire)")
+        if total_enfants_pleins > 0:
+            detail.append(f"+{total_enfants_pleins} enfant(s)")
+        if total_enfants_demi > 0:
+            detail.append(f"+{total_enfants_demi} en alternee")
+        if nb_handicapes > 0:
+            detail.append(f"+{nb_handicapes} handicape(s)")
+        if foyer.get("parent_isole"):
+            detail.append("+parent isole")
+        foyer["detail_parts"] = " ".join(detail) + f" = {parts} parts"
 
     def _compute_completeness(self) -> float:
         """Estime le taux de complétude du profil (0.0 à 1.0)."""
