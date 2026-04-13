@@ -175,6 +175,10 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
             "url": f"/output/{status_file}",
         })
 
+    # Envoyer la completion initiale
+    pct = agent._compute_completion()
+    await websocket.send_json({"type": "completion", "percent": pct})
+
     # Envoyer le message de bienvenue (ou de reprise)
     await websocket.send_json({
         "type": "assistant",

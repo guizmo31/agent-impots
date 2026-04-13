@@ -156,10 +156,27 @@ function setStatus(state, text) {
 let ingestionInProgress = false;
 let ingestionTotal = 0;
 
+function updateCompletionBadge(pct) {
+    const badge = document.getElementById('completion-badge');
+    const ring = document.getElementById('completion-ring-fill');
+    const text = document.getElementById('completion-text');
+    if (badge && ring && text) {
+        badge.style.display = 'flex';
+        ring.setAttribute('stroke-dasharray', `${pct}, 100`);
+        text.textContent = `${pct}%`;
+        // Changer la couleur selon le pourcentage
+        if (pct >= 100) ring.style.stroke = '#2ecc71';
+        else if (pct >= 50) ring.style.stroke = '#f39c12';
+        else ring.style.stroke = '#3498db';
+    }
+}
+
 function handleMessage(data) {
     switch (data.type) {
+        case 'completion':
+            updateCompletionBadge(data.percent || 0);
+            return;
         case 'status_link':
-            // Afficher le bouton de status dans le header
             const link = document.getElementById('status-page-link');
             if (link && data.url) {
                 link.href = data.url;

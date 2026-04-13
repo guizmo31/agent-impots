@@ -190,6 +190,10 @@ class AgentFiscal:
                     self.store.add_message("assistant", r["content"])
 
         self._persist()
+
+        # Envoyer le pourcentage de completion apres chaque echange
+        await self._send_completion()
+
         return responses
 
     # ==================================================================
@@ -531,6 +535,53 @@ class AgentFiscal:
     # Etape 1 : INGESTION -- extraction structuree -> RAG local -> profil
     # ==================================================================
 
+    def _compute_completion(self) -> int:
+        """Calcule le pourcentage de completion de la session."""
+        if self.state == "done":
+            return 100
+
+        # Compter les fichiers totaux
+        total_files = 0
+        if self.documents_path:
+            folder = Path(self.documents_path)
+            if folder.exists():
+                exts = {".pdf", ".png", ".jpg", ".jpeg", ".tiff", ".bmp", ".xlsx", ".xls", ".csv", ".docx", ".txt"}
+                total_files = len([f for f in folder.rglob("*") if f.is_file() and f.suffix.lower() in exts])
+
+        docs_extracted = len(self.extractions.get_all()) if self.extractions else 0
+        ingestion_pct = docs_extracted / total_files if total_files > 0 else 0
+
+        if self.state in (STATE_WELCOME, STATE_INGESTION):
+            return int(ingestion_pct * 50)
+
+        if self.state == STATE_PARALLEL:
+            q_total = len(self.pending_questions)
+            q_done = self.current_question_index
+            q_pct = q_done / q_total if q_total > 0 else 0
+            return int(ingestion_pct * 35 + q_pct * 15)
+
+        if self.state == STATE_VALIDATION:
+            q_total = len(self.pending_questions)
+            q_done = self.current_question_index
+            q_pct = q_done / q_total if q_total > 0 else 1.0
+            return 50 + int(q_pct * 25)
+
+        if self.state == STATE_CALCUL:
+            return 85
+        if self.state == STATE_VERIFICATION:
+            return 95
+
+        return 0
+
+    async def _send_completion(self):
+        """Envoie le pourcentage de completion au frontend."""
+        pct = self._compute_completion()
+        if self.on_progress:
+            try:
+                await self.on_progress({"type": "completion", "percent": pct})
+            except Exception:
+                pass
+
     async def _send_progress(self, msg: dict):
         """Envoie un message de progression en temps reel via le WebSocket + status page."""
         if self.on_progress:
@@ -538,6 +589,8 @@ class AgentFiscal:
                 await self.on_progress(msg)
             except Exception:
                 pass
+        # Envoyer le pourcentage mis a jour
+        await self._send_completion()
         # Mettre a jour la page de status
         if self.status and msg.get("filename"):
             self.status.add_document(
