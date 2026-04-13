@@ -626,17 +626,17 @@ textarea:disabled {
 .session-card {
     display: flex;
     align-items: center;
-    background: #e8f0fe;
-    border: 1px solid #b8d4f0;
+    background: #27ae60;
+    border: 1px solid #219a52;
     border-radius: 12px;
     overflow: hidden;
     transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
 }
 
 .session-card:hover {
-    background: #d4e6fa;
-    border-color: var(--primary-light);
-    box-shadow: 0 2px 8px rgba(41, 128, 185, 0.2);
+    background: #219a52;
+    border-color: #1e8449;
+    box-shadow: 0 2px 8px rgba(39, 174, 96, 0.3);
 }
 
 .session-card-main {
@@ -648,7 +648,7 @@ textarea:disabled {
 .session-card-title {
     font-weight: 600;
     font-size: 15px;
-    color: var(--text);
+    color: white;
     margin-bottom: 6px;
 }
 
@@ -656,7 +656,7 @@ textarea:disabled {
     display: flex;
     gap: 12px;
     font-size: 13px;
-    color: var(--text-light);
+    color: rgba(255, 255, 255, 0.85);
     flex-wrap: wrap;
 }
 
@@ -687,12 +687,12 @@ textarea:disabled {
     border: none;
     padding: 14px;
     cursor: pointer;
-    color: var(--text-light);
+    color: rgba(255, 255, 255, 0.6);
     transition: color 0.2s;
 }
 
 .session-delete:hover {
-    color: var(--error);
+    color: white;
 }
 
 .session-new {
