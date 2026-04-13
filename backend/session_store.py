@@ -181,22 +181,69 @@ class SessionStore:
             self.filepath.unlink()
 
 
+def _compute_completion(state: str, data: dict, docs_extracted: int, docs_path: str) -> int:
+    """Calcule le pourcentage de completion d'une session.
+
+    Strategie :
+      0-50%  : Ingestion documents (docs extraits / total fichiers dans le dossier)
+      50-75% : Questions (repondues / total)
+      75-95% : Calcul en cours
+      100%   : Rapport genere (state == done)
+    """
+    if state == "done":
+        return 100
+
+    # Compter les fichiers totaux dans le dossier
+    total_files = 0
+    if docs_path:
+        folder = Path(docs_path)
+        if folder.exists():
+            exts = {".pdf", ".png", ".jpg", ".jpeg", ".tiff", ".bmp", ".xlsx", ".xls", ".csv", ".docx", ".txt"}
+            total_files = len([f for f in folder.rglob("*") if f.is_file() and f.suffix.lower() in exts])
+
+    # Phase 1 : Ingestion (0-50%)
+    if state in ("welcome", "ingestion", "parallel"):
+        if total_files == 0:
+            return 0
+        ingestion_pct = min(docs_extracted / total_files, 1.0) if total_files > 0 else 0
+        # En mode parallel, on a aussi des questions en cours
+        if state == "parallel":
+            q_total = len(data.get("pending_questions", []))
+            q_done = data.get("current_question_index", 0)
+            q_pct = q_done / q_total if q_total > 0 else 0
+            # Moyenne ponderee : 70% ingestion + 30% questions
+            return int(ingestion_pct * 35 + q_pct * 15)
+        return int(ingestion_pct * 50)
+
+    # Phase 2 : Validation/Questions (50-75%)
+    if state == "validation":
+        q_total = len(data.get("pending_questions", []))
+        q_done = data.get("current_question_index", 0)
+        q_pct = q_done / q_total if q_total > 0 else 1.0
+        return 50 + int(q_pct * 25)
+
+    # Phase 3 : Calcul (75-95%)
+    if state in ("calcul", "verification"):
+        return 85 if state == "calcul" else 95
+
+    return 0
+
+
 def list_sessions() -> list[dict]:
     """Liste toutes les sessions existantes (uniquement les fichiers session principaux)."""
     sessions = []
     for f in SESSIONS_DIR.glob("*.json"):
-        # Ignorer les fichiers auxiliaires (_extractions.json, _profile.json)
         if "_extractions" in f.name or "_profile" in f.name:
             continue
 
         try:
             data = json.loads(f.read_text(encoding="utf-8"))
 
-            # Verifier que c'est bien un fichier de session (a un "state")
             if "state" not in data:
                 continue
 
             session_id = f.stem
+            state = data.get("state", "?")
 
             # Compter les documents depuis le fichier _extractions.json
             docs_count = 0
@@ -208,14 +255,18 @@ def list_sessions() -> list[dict]:
                 except (json.JSONDecodeError, OSError):
                     pass
 
+            docs_path = data.get("documents_path", "")
+            completion = _compute_completion(state, data, docs_count, docs_path)
+
             sessions.append({
                 "session_id": session_id,
                 "name": data.get("name") or "Sans nom",
-                "state": data.get("state", "?"),
+                "state": state,
                 "created_at": data.get("created_at", ""),
                 "updated_at": data.get("updated_at", ""),
                 "documents_count": docs_count,
                 "has_result": data.get("computation_result") is not None,
+                "completion": completion,
             })
         except (json.JSONDecodeError, OSError):
             continue

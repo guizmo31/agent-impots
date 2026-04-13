@@ -42,23 +42,30 @@ function renderSessionList(sessions) {
         }) : '?';
 
         const stateLabels = {
-            'welcome': 'Non commencée',
+            'welcome': 'Non commencee',
             'scan_folder': 'En attente de documents',
-            'analyze_docs': 'Analyse en cours',
-            'questions': 'Questions en cours',
-            'compute': 'Calcul en cours',
-            'report': 'Rapport en cours',
-            'done': 'Terminée',
+            'ingestion': 'Analyse des documents',
+            'parallel': 'Analyse + questions',
+            'validation': 'Questions en cours',
+            'calcul': 'Calcul en cours',
+            'verification': 'Verification',
+            'done': 'Terminee',
         };
         const stateLabel = stateLabels[s.state] || s.state;
-        const stateClass = s.state === 'done' ? 'state-done' : s.state === 'questions' ? 'state-progress' : 'state-other';
+        const pct = s.completion || 0;
 
         return `
             <div class="session-card" data-id="${s.session_id}">
                 <div class="session-card-main" onclick="resumeSession('${s.session_id}')">
-                    <div class="session-card-title">${escapeHtml(s.name)}</div>
+                    <div class="session-card-top">
+                        <span class="session-card-title">${escapeHtml(s.name)}</span>
+                        <span class="session-pct">${pct}%</span>
+                    </div>
+                    <div class="session-progress-track">
+                        <div class="session-progress-fill" style="width:${pct}%"></div>
+                    </div>
                     <div class="session-card-meta">
-                        <span class="session-state ${stateClass}">${stateLabel}</span>
+                        <span>${stateLabel}</span>
                         <span>${s.documents_count} doc(s)</span>
                         <span>${date}</span>
                     </div>
