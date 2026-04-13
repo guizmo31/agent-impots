@@ -59,6 +59,14 @@ async def index():
     return FileResponse(str(BASE_DIR / "frontend" / "index.html"))
 
 
+@app.get("/reference")
+async def reference():
+    """Page de reference fiscale : toutes les cases 2042 + regles."""
+    from reference_page import generate_reference_html
+    from fastapi.responses import HTMLResponse
+    return HTMLResponse(generate_reference_html())
+
+
 # ---- API Sessions ----
 
 @app.get("/api/sessions")
