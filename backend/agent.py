@@ -451,8 +451,7 @@ class AgentFiscal:
 
             # Mettre a jour le status
             if self.status:
-                self.status.add_question(question, answer)
-                self.status.set_profile(self.profile.data)
+                self.status.refresh()
 
             self.current_question_index += 1
             self._persist()
@@ -845,8 +844,7 @@ class AgentFiscal:
                 self.profile.merge_user_answers(extraction)
 
             if self.status:
-                self.status.add_question(question, answer)
-                self.status.set_profile(self.profile.data)
+                self.status.refresh()
                 self.status.set_state("validation")
 
             self.current_question_index += 1
@@ -1003,7 +1001,7 @@ class AgentFiscal:
         """Calcul fiscal base UNIQUEMENT sur le profil JSON + RAG."""
         if self.status:
             self.status.set_state("calcul")
-            self.status.set_profile(self.profile.data)
+            self.status.refresh()
 
         profile_json = self.profile.get_for_llm()
         print(f"[CALCUL] Profil JSON : {len(profile_json)} chars")

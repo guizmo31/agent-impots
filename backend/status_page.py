@@ -9,26 +9,27 @@ Ce fichier HTML est regenere a chaque etape significative de l'agent :
 
 L'utilisateur peut ouvrir ce fichier a tout moment pour voir l'avancement.
 """
+import json
 from datetime import datetime
 from pathlib import Path
 
 
 class StatusPage:
-    """Genere et met a jour la page de status HTML."""
+    """Genere et met a jour la page de status HTML.
+    Lit les donnees directement depuis les fichiers de session (pas de copie en memoire)."""
 
     def __init__(self, output_dir: str, session_id: str):
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(exist_ok=True)
         self.session_id = session_id
         self.filepath = self.output_dir / f"status_{session_id[:8]}.html"
+        self.sessions_dir = Path(__file__).resolve().parent.parent / "sessions"
 
-        # Donnees accumulees
+        # Seules les donnees NON persistees ailleurs sont gardees en memoire
         self.session_name = ""
         self.state = "initialisation"
-        self.documents: list[dict] = []    # [{"filename", "status", "type", "detail"}]
-        self.profile: dict = {}
-        self.questions: list[dict] = []    # [{"question", "answer"}]
-        self.cases: list[dict] = []        # [{"case", "libelle", "montant", "justification"}]
+        self.documents: list[dict] = []
+        self.cases: list[dict] = []
         self.calcul: dict = {}
         self.warnings: list[str] = []
         self.report_path: str = ""
@@ -59,18 +60,9 @@ class StatusPage:
         })
         self._write()
 
-    def set_profile(self, profile: dict):
-        self.profile = profile
+    def refresh(self):
+        """Force un rafraichissement du HTML (relit les fichiers de session)."""
         self._write()
-
-    def add_question(self, question: str, answer: str = ""):
-        self.questions.append({"question": question, "answer": answer})
-        self._write()
-
-    def update_last_answer(self, answer: str):
-        if self.questions:
-            self.questions[-1]["answer"] = answer
-            self._write()
 
     def set_cases(self, cases: list[dict]):
         self.cases = cases
@@ -99,9 +91,50 @@ class StatusPage:
         html = self._render()
         self.filepath.write_text(html, encoding="utf-8")
 
+    def _load_profile(self) -> dict:
+        """Charge le profil depuis le fichier de session."""
+        path = self.sessions_dir / f"{self.session_id}_profile.json"
+        if path.exists():
+            try:
+                return json.loads(path.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                pass
+        return {}
+
+    def _load_questions(self) -> list[dict]:
+        """Charge les questions/reponses depuis l'historique de la session."""
+        path = self.sessions_dir / f"{self.session_id}.json"
+        if not path.exists():
+            return []
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return []
+
+        # Extraire les Q/R de l'historique de conversation
+        history = data.get("conversation_history", [])
+        questions = []
+        pending_question = None
+        for msg in history:
+            content = msg.get("content", "")
+            role = msg.get("role", "")
+            if role == "assistant" and "**Question " in content:
+                # Extraire la question apres "Question X/Y :\n"
+                parts = content.split(":\n", 1)
+                if len(parts) > 1:
+                    pending_question = parts[1].strip()
+            elif role == "user" and pending_question:
+                questions.append({"question": pending_question, "answer": content})
+                pending_question = None
+        return questions
+
     def _render(self) -> str:
         now = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
         title = self.session_name or "Declaration en cours"
+
+        # Charger les donnees fraiches depuis les fichiers de session
+        profile = self._load_profile()
+        questions = self._load_questions()
 
         state_labels = {
             "initialisation": ("Initialisation", "#95a5a6"),
@@ -134,17 +167,25 @@ class StatusPage:
                 )
             docs_html += "</tbody></table>"
 
-        # Profil
+        # Profil (lu depuis le fichier de session)
         profile_html = ""
-        if self.profile:
-            foyer = self.profile.get("foyer", {})
-            revenus = self.profile.get("revenus", {})
+        if profile:
+            foyer = profile.get("foyer", {})
+            revenus = profile.get("revenus", {})
             profile_html = '<div class="profile-grid">'
 
             if foyer.get("situation"):
                 parts = foyer.get("nb_parts", "?")
-                enfants = foyer.get("nb_enfants_mineurs", 0)
-                profile_html += f'<div class="profile-card"><h4>Foyer</h4><p>{foyer["situation"]}, {enfants} enfant(s), {parts} part(s)</p></div>'
+                detail = foyer.get("detail_parts", "")
+                enfants_min = foyer.get("nb_enfants_mineurs", 0)
+                enfants_maj = foyer.get("nb_enfants_majeurs_rattaches", 0)
+                enfants_txt = f"{enfants_min} mineur(s)"
+                if enfants_maj:
+                    enfants_txt += f" + {enfants_maj} majeur(s)"
+                profile_html += f'<div class="profile-card"><h4>Foyer</h4><p>{foyer["situation"]}, {enfants_txt}, {parts} part(s)</p>'
+                if detail:
+                    profile_html += f'<p style="font-size:12px;color:#666">{detail}</p>'
+                profile_html += '</div>'
 
             salaires = revenus.get("salaires", [])
             if salaires:
@@ -166,11 +207,11 @@ class StatusPage:
 
             profile_html += "</div>"
 
-        # Questions
+        # Questions (lues depuis l'historique de la session)
         questions_html = ""
-        if self.questions:
+        if questions:
             questions_html = "<table><thead><tr><th>#</th><th>Question</th><th>Reponse</th></tr></thead><tbody>"
-            for i, q in enumerate(self.questions):
+            for i, q in enumerate(questions):
                 answer = q["answer"] or '<em style="color:#95a5a6">en attente...</em>'
                 questions_html += f'<tr><td>{i+1}</td><td>{q["question"][:120]}</td><td>{answer}</td></tr>'
             questions_html += "</tbody></table>"
