@@ -88,12 +88,13 @@ active_agents: dict[str, AgentFiscal] = {}
 
 
 def _create_agent(session_id: str) -> AgentFiscal:
-    """Crée ou restaure un agent pour une session donnée."""
+    """Cree ou restaure un agent pour une session donnee."""
     return AgentFiscal(
         document_parser=DocumentParser(),
         fiscal_engine=FiscalEngine(),
         report_generator=ReportGenerator(output_dir=str(OUTPUT_DIR)),
         session_id=session_id,
+        output_dir=str(OUTPUT_DIR),
     )
 
 
@@ -118,13 +119,28 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
             agent.store.set("name", session_name)
         elif not current_name:
             from datetime import datetime
-            agent.store.set("name", f"Declaration {datetime.now().strftime('%d/%m/%Y %H:%M')}")
+            session_name = f"Declaration {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+            agent.store.set("name", session_name)
+        else:
+            session_name = current_name
+
+    # Initialiser le status page avec le nom
+    if agent.status and session_name:
+        agent.status.set_session_name(session_name)
 
     # Brancher le callback de progression pour envoyer en temps reel
     async def send_progress(msg: dict):
         await websocket.send_json(msg)
 
     agent.on_progress = send_progress
+
+    # Envoyer le lien vers la page de status
+    status_file = agent.status.get_filename() if agent.status else None
+    if status_file:
+        await websocket.send_json({
+            "type": "status_link",
+            "url": f"/output/{status_file}",
+        })
 
     # Envoyer le message de bienvenue (ou de reprise)
     await websocket.send_json({

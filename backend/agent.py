@@ -24,6 +24,7 @@ from fiscal_profile import FiscalProfile
 from session_store import SessionStore
 from extraction_store import ExtractionStore
 from extractors import extract_structured, extract_batch
+from status_page import StatusPage
 
 SYSTEM_PROMPT = (
     "Tu es un assistant fiscal expert en declaration d'impots francaise. "
@@ -64,17 +65,21 @@ FILENAME_PATTERNS = {
 
 class AgentFiscal:
     def __init__(self, document_parser: DocumentParser, fiscal_engine: FiscalEngine,
-                 report_generator: ReportGenerator, session_id: str = ""):
+                 report_generator: ReportGenerator, session_id: str = "",
+                 output_dir: str = ""):
         self.parser = document_parser
         self.engine = fiscal_engine
         self.reporter = report_generator
         self.rag = FiscalRAG()
         self.session_id = session_id
 
-        # Mémoire persistante
+        # Memoire persistante
         self.store = SessionStore(session_id) if session_id else None
         self.profile = FiscalProfile(session_id) if session_id else None
         self.extractions = ExtractionStore(session_id) if session_id else None
+
+        # Page de status HTML temps reel
+        self.status = StatusPage(output_dir or str(Path(__file__).resolve().parent.parent / "output"), session_id) if session_id else None
 
         # Callbacks pour envoyer des messages en temps reel (set par app.py)
         self.on_progress = None
@@ -268,10 +273,13 @@ class AgentFiscal:
         self.pending_questions = preliminary_questions
         self.current_question_index = 0
 
-        # Passer en mode parallele : questions + ingestion simultanées
+        # Passer en mode parallele : questions + ingestion simultanees
         self.state = STATE_PARALLEL
         self._ingestion_done = False
         self._persist()
+
+        if self.status:
+            self.status.set_state("parallel")
 
         # Envoyer le resume de l'analyse rapide
         categories_found = quick_analysis.get("categories", {})
@@ -433,6 +441,11 @@ class AgentFiscal:
             if extraction:
                 self.profile.merge_user_answers(extraction)
 
+            # Mettre a jour le status
+            if self.status:
+                self.status.add_question(question, answer)
+                self.status.set_profile(self.profile.data)
+
             self.current_question_index += 1
             self._persist()
 
@@ -519,12 +532,20 @@ class AgentFiscal:
     # ==================================================================
 
     async def _send_progress(self, msg: dict):
-        """Envoie un message de progression en temps reel via le WebSocket."""
+        """Envoie un message de progression en temps reel via le WebSocket + status page."""
         if self.on_progress:
             try:
                 await self.on_progress(msg)
             except Exception:
                 pass
+        # Mettre a jour la page de status
+        if self.status and msg.get("filename"):
+            self.status.add_document(
+                msg["filename"],
+                msg.get("status", "?"),
+                msg.get("detail", "").split("|")[0].strip() if "|" in msg.get("detail", "") else "",
+                msg.get("detail", ""),
+            )
 
     async def _send_now(self, content: str, msg_type: str = "assistant"):
         """Envoie un message immediatement au client (sans attendre la fin du traitement)."""
@@ -759,14 +780,18 @@ class AgentFiscal:
         )]
 
     async def _step_validation_answer(self, answer: str) -> list[dict]:
-        """Traite une réponse et met à jour le profil."""
+        """Traite une reponse et met a jour le profil."""
         if self.current_question_index < len(self.pending_questions):
             question = self.pending_questions[self.current_question_index]
 
-            # Utiliser le LLM pour structurer la réponse en données de profil
             extraction = await self._structure_answer(question, answer)
             if extraction:
                 self.profile.merge_user_answers(extraction)
+
+            if self.status:
+                self.status.add_question(question, answer)
+                self.status.set_profile(self.profile.data)
+                self.status.set_state("validation")
 
             self.current_question_index += 1
             self._persist()
@@ -890,7 +915,11 @@ class AgentFiscal:
     # ==================================================================
 
     async def _step_calcul(self) -> list[dict]:
-        """Calcul fiscal basé UNIQUEMENT sur le profil JSON + RAG."""
+        """Calcul fiscal base UNIQUEMENT sur le profil JSON + RAG."""
+        if self.status:
+            self.status.set_state("calcul")
+            self.status.set_profile(self.profile.data)
+
         profile_json = self.profile.get_for_llm()
         print(f"[CALCUL] Profil JSON : {len(profile_json)} chars")
 
@@ -1002,15 +1031,26 @@ class AgentFiscal:
             result.setdefault("remarques", [])
             result["remarques"] = warnings + result["remarques"]
 
-        # Sauvegarder le résultat
+        # Sauvegarder le resultat
         if self.store:
             self.store.save_result(result)
 
-        # Générer le rapport
+        # Mettre a jour le status avec les resultats
+        if self.status:
+            self.status.set_cases(result.get("cases", []))
+            self.status.set_calcul(result.get("calcul_impot", {}))
+            self.status.set_warnings(result.get("remarques", []))
+            self.status.set_state("verification")
+
+        # Generer le rapport
         report_path = self.reporter.generate(result, [], profile)
 
         if self.store:
             self.store.set("report_path", report_path)
+
+        if self.status:
+            self.status.set_report_path(report_path)
+            self.status.set_state("done")
 
         self.state = STATE_DONE
         self._persist()

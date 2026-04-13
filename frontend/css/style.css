@@ -90,6 +90,25 @@ html, body {
     opacity: 0.8;
 }
 
+.status-page-btn {
+    display: none;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    background: rgba(255, 255, 255, 0.15);
+    color: white;
+    text-decoration: none;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    transition: background 0.2s;
+    white-space: nowrap;
+}
+
+.status-page-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
 .status-badge {
     margin-left: auto;
     display: flex;

@@ -151,6 +151,14 @@ let ingestionTotal = 0;
 
 function handleMessage(data) {
     switch (data.type) {
+        case 'status_link':
+            // Afficher le bouton de status dans le header
+            const link = document.getElementById('status-page-link');
+            if (link && data.url) {
+                link.href = data.url;
+                link.style.display = 'inline-flex';
+            }
+            return;
         case 'progress':
             ingestionInProgress = true;
             ingestionTotal = data.total || 0;
