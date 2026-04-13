@@ -8,12 +8,13 @@
 
 ## Avertissement
 
-**Cet outil est une aide a la preparation de la declaration d'impots.** Il ne remplace en aucun cas un conseiller fiscal professionnel, un expert-comptable ou l'administration fiscale.
+**Cet outil est un prototype experimental fourni a titre d'aide uniquement.** Il ne constitue en aucun cas un conseil fiscal, juridique ou comptable. Il ne remplace en aucun cas un conseiller fiscal professionnel, un expert-comptable ou l'administration fiscale.
 
 - Les calculs et les numeros de cases sont des **estimations** basees sur les documents fournis et la base de connaissances fiscales integree.
 - Des erreurs sont possibles, notamment sur les situations complexes (multi-societes, revenus etrangers, dispositifs speciaux).
-- **Verifiez systematiquement chaque montant et chaque case** avant de soumettre votre declaration officielle sur [impots.gouv.fr](https://www.impots.gouv.fr).
+- **Verifiez systematiquement chaque montant et chaque case** avec la legislation fiscale en vigueur avant de soumettre votre declaration officielle sur [impots.gouv.fr](https://www.impots.gouv.fr).
 - En cas de doute, consultez un professionnel.
+- **L'auteur decline toute responsabilite en cas d'erreur dans votre declaration.**
 
 ---
 
@@ -41,6 +42,30 @@ Remplir sa declaration d'impots est complexe : entre les numeros de cases (1AJ, 
 - Meme la recherche semantique (RAG) utilise des embeddings generes **localement**
 - Vous pouvez couper internet et l'agent fonctionne quand meme
 
+### Capacite de votre PC
+
+Le modele par defaut (**Mistral-Nemo 12B**) necessite environ **10 Go de RAM libre**. Si votre PC n'a pas assez de memoire, l'agent sera tres lent ou ne fonctionnera pas.
+
+**Si votre PC a moins de 12 Go de RAM**, basculez sur le modele de secours Mistral 7B (plus leger, ~5 Go de RAM) :
+
+1. Verifiez que Mistral 7B est installe : `ollama list` (il est telecharge automatiquement par `setup.bat`)
+2. Editez le fichier `backend/ollama_client.py`
+3. Modifiez la liste `MODEL_PREFERENCES` en mettant `"mistral"` en premier :
+   ```python
+   MODEL_PREFERENCES = [
+       "mistral",         # 7B, plus leger, fonctionne avec 8 Go de RAM
+       "mistral-nemo",    # 12B, meilleur mais necessite plus de RAM
+   ]
+   ```
+4. Relancez l'agent
+
+> **Note** : Mistral 7B est moins precis que Mistral-Nemo 12B, notamment sur le francais et la generation de JSON structure. Les resultats peuvent contenir plus d'erreurs.
+
+| Modele | RAM necessaire | Qualite | Vitesse |
+|--------|---------------|---------|---------|
+| **Mistral-Nemo 12B** (defaut) | ~10 Go | Bonne | ~15s par document |
+| **Mistral 7B** (secours) | ~5 Go | Moyenne | ~8s par document |
+
 ## Domaines couverts
 
 | Domaine | Details |
@@ -58,31 +83,61 @@ Remplir sa declaration d'impots est complexe : entre les numeros de cases (1AJ, 
 L'agent fonctionne **integralement en local** selon ce pipeline :
 
 ```
-Navigateur (http://localhost:8000)           <- 100% local
-    | WebSocket
+Navigateur (http://localhost:8000)                         <- 100% local
+    | WebSocket (+ messages de completion en temps reel)
     v
-FastAPI (backend Python)                     <- 100% local
+FastAPI (backend Python)                                   <- 100% local
     |
-    |-- Etape 1 : INGESTION
-    |   Chaque document -> extraction structuree universelle (1 appel LLM par doc)
-    |   -> ExtractionStore (RAG local des donnees du contribuable)
-    |   -> FiscalProfile (profil JSON = source de verite unique)
+    |-- Etape 1 : INGESTION (0% -> 50% completion)
+    |   |
+    |   |-- 1a. Analyse rapide des noms de fichiers (instantane, sans LLM)
+    |   |       -> Detection des types : salaires, immobilier, titres, SCPI...
+    |   |       -> Generation de questions structurantes adaptees
+    |   |
+    |   |-- 1b. Conversion en Markdown (instantane, sans LLM)
+    |   |       Chaque fichier (PDF, Excel, image, CSV, Word)
+    |   |       -> Markdown structure et lisible (cache dans output/markdown/)
+    |   |       -> Verifiable par l'utilisateur via la page /documents
+    |   |
+    |   |-- 1c. Extraction structuree par le LLM (sur le markdown, pas le fichier brut)
+    |   |       1 appel LLM par document (ou batch de 3 pour les petits docs)
+    |   |       -> JSON structure : type, montants, entite, confiance
+    |   |       -> Sauvegarde immediate sur disque (survit a un crash)
+    |   |
+    |   '-- 1d. Construction du profil fiscal
+    |           ExtractionStore (RAG local) -> FiscalProfile (JSON source de verite)
     |
-    |-- Etape 2 : VALIDATION
-    |   Profil analyse -> detection des manques -> questions ciblees
+    |   [En parallele : l'utilisateur repond aux questions structurantes]
     |
-    |-- Etape 3 : CALCUL
-    |   RAG fiscal (regles, bareme, cases) + profil JSON -> cases 2042
+    |-- Etape 2 : VALIDATION (50% -> 75% completion)
+    |   Profil analyse par le LLM -> detection des manques
+    |   -> Questions ciblees (ne redemande pas ce qui est deja connu)
+    |   -> Reponses structurees localement (pattern matching, LLM en fallback)
     |
-    |-- Etape 4 : VERIFICATION
-    |   Cross-check coherence (SASU/IS, LMNP/LMP, ...) -> rapport HTML
+    |-- Etape 3 : CALCUL (75% -> 95% completion)
+    |   RAG fiscal (regles, bareme, 145 cases 2042) + profil JSON
+    |   -> Le LLM recoit UNIQUEMENT le profil, jamais les documents bruts
+    |   -> Cases 2042 avec montants et justifications
+    |
+    |-- Etape 4 : VERIFICATION (95% -> 100% completion)
+    |   Cross-check automatique :
+    |   - Dividendes SASU vs IS declare
+    |   - Recettes meublees > 23k -> LMP pas LMNP
+    |   - Revenu net <= revenu brut
+    |   - Cases citees existent dans le referentiel
+    |   -> Rapport HTML + PDF + page de status
     |
     v
 Ollama (100% local)
     |-- Mistral-Nemo 12B (~7 Go) -- LLM principal (128K contexte, excellent en francais)
-    |-- Mistral 7B (~4 Go) -- modele de secours
+    |-- Mistral 7B (~4 Go) -- modele de secours (si RAM insuffisante)
     '-- nomic-embed-text (~270 Mo) -- embeddings pour les deux RAG locaux
 ```
+
+**Trois pages web** (toutes locales) :
+- **Agent** (`/`) : interface de chat avec barre de progression et pourcentage de completion
+- **Documents** (`/documents`) : visualisation des markdowns generes (verification du contenu)
+- **Reference fiscale** (`/reference`) : guide interactif des 145 cases 2042 avec exemples concrets
 
 **Deux RAG locaux** (aucun cloud) :
 - **RAG fiscal** : regles fiscales, ~145 cases 2042, bareme IR, articles CGI
@@ -152,7 +207,7 @@ Puis ouvrez **http://localhost:8000** dans votre navigateur. L'agent tourne loca
 |----------|----------|
 | `ollama` n'est pas reconnu | Fermez et rouvrez le terminal apres l'installation d'Ollama. Le script cherche aussi dans `%LOCALAPPDATA%\Programs\Ollama\` |
 | Erreur WebSocket / 404 sur `/ws/` | Lancez `pip install "uvicorn[standard]"` |
-| Le modele est tres lent | Normal au premier lancement (chargement en RAM). Mistral-Nemo 12B necessite ~10 Go de RAM libre |
+| Le modele est tres lent | Normal au premier lancement (chargement en RAM). Mistral-Nemo 12B necessite ~10 Go de RAM libre. Si trop lent, basculez sur Mistral 7B (voir section "Capacite de votre PC" ci-dessus) |
 | OCR ne fonctionne pas sur les images | Installez [Tesseract OCR](https://github.com/UB-Mannheim/tesseract/wiki) pour Windows. Les PDF textuels fonctionnent sans Tesseract |
 
 ---
@@ -233,50 +288,54 @@ Puis ouvrez **http://localhost:8000**. 100% local, zero cloud.
 Agent : "Bonjour ! Indiquez le chemin du dossier contenant vos documents fiscaux."
   Vous : C:\Users\MonNom\Documents\Impots2025
 
-Agent : "32 documents trouves. Ingestion en cours..."
-         [Chaque document est analyse localement un par un]
+Agent : "32 documents trouves.
+         Types detectes (analyse rapide) : salaires (12), immobilier (6), titres (4)...
+         L'analyse approfondie demarre en arriere-plan."        <- 0%
 
-Agent : "Ingestion terminee. 28 extraits, 4 non exploitables.
-         Types detectes : fiche_de_paie (12), taxe_fonciere (3), pret_immobilier (2)...
-         Montants cles : net_imposable: 48 000EUR, taxe_fonciere: 1 200EUR..."
-
-Agent : "Il me manque 5 informations pour calculer votre impot."
 Agent : "Question 1/5 : Quelle est votre situation familiale ?"
-  Vous : Marie, 2 enfants
+  Vous : Marie, 2 enfants                                       <- reponse instantanee
 
-Agent : "Question 2/5 : Pour vos revenus fonciers, etes-vous au micro-foncier ou au reel ?"
+Agent : "Question 2/5 : Location nue ou meublee ?"
   Vous : Micro-foncier
+         Analyse en arriere-plan : 18/32 documents...            <- 30%
 
-   ... (questions adaptees a VOTRE profil)
+   ... (questions et analyse en parallele)
 
-Agent : "Voici le resultat de votre declaration :"
+Agent : "Analyse terminee. Profil fiscal construit."             <- 50%
+Agent : "Il me manque 2 informations..."                         <- 60%
+Agent : "Calcul fiscal en cours..."                              <- 85%
+
+Agent : "Voici le resultat de votre declaration :"               <- 100%
          | Case | Libelle                   | Montant   |
          |------|---------------------------|-----------|
          | 1AJ  | Salaires declarant 1      | 48 000 EUR|
          | 4BE  | Revenus fonciers micro     | 12 000 EUR|
-         | 7UF  | Dons associations          |    500 EUR|
          | ...  | ...                       | ...       |
 
-Agent : [Lien vers le rapport HTML detaille]
+Agent : [Telecharger le PDF] [Voir en HTML]
 ```
 
-### Memoire persistante
+### Memoire persistante et interruption
 
-L'agent sauvegarde votre progression **localement** :
-- Fermez le navigateur en plein milieu -> rouvrez -> l'agent reprend ou vous en etiez
-- Les documents deja analyses ne sont pas re-traites
-- Le profil fiscal se construit au fil des sessions
+L'agent sauvegarde votre progression **localement** a chaque etape :
+
+- **Bouton "Interrompre ma session"** : sauvegarde l'etat complet (documents deja analyses, profil fiscal, reponses aux questions) puis revient a l'ecran d'accueil. Vous pouvez interrompre a tout moment, y compris en plein milieu de l'analyse des documents.
+- **Reprise automatique** : quand vous revenez sur votre session, l'agent detecte les documents deja analyses et reprend exactement ou vous en etiez, sans rien re-traiter.
+- **Pourcentage de completion** : visible sur l'ecran d'accueil et dans le header pendant la session, il indique la progression globale de 0% a 100%.
+- **Crash/fermeture du navigateur** : chaque extraction est sauvegardee sur disque immediatement. Rien n'est perdu.
 
 ### Formats de documents supportes
 
-| Format | Extension | Methode d'extraction |
-|--------|-----------|---------------------|
-| PDF texte | `.pdf` | PyMuPDF (extraction directe, 100% local) |
-| PDF scanne | `.pdf` | PyMuPDF + OCR Tesseract (100% local) |
-| Images | `.png` `.jpg` `.jpeg` `.tiff` `.bmp` | OCR Tesseract (100% local) |
-| Excel | `.xlsx` `.xls` | openpyxl |
-| CSV | `.csv` | csv (detection auto du separateur) |
-| Word | `.docx` | python-docx |
+Chaque document est d'abord converti en **Markdown structure** (verifiable sur la page `/documents`) avant d'etre envoye au LLM.
+
+| Format | Extension | Methode de conversion |
+|--------|-----------|----------------------|
+| PDF texte | `.pdf` | PyMuPDF -> Markdown avec pages, montants en gras |
+| PDF scanne | `.pdf` | PyMuPDF + OCR Tesseract -> Markdown |
+| Images | `.png` `.jpg` `.jpeg` `.tiff` `.bmp` | OCR Tesseract -> Markdown |
+| Excel | `.xlsx` `.xls` | openpyxl -> tableaux Markdown |
+| CSV | `.csv` | csv -> tableaux Markdown (detection auto separateur) |
+| Word | `.docx` | python-docx -> Markdown avec headings |
 | Texte | `.txt` | Lecture directe |
 
 ---
@@ -291,17 +350,21 @@ agent-impots/
 |-- backend/
 |   |-- app.py                      <- Serveur FastAPI + WebSocket
 |   |-- agent.py                    <- Orchestration multi-etapes
-|   |-- ollama_client.py            <- Client Ollama (Mistral-Nemo 12B, 100% local)
+|   |-- ollama_client.py            <- Client Ollama (detection auto du meilleur modele)
+|   |-- markdown_converter.py       <- Conversion universelle -> Markdown
 |   |-- extractors.py               <- Extracteur universel de donnees fiscales
 |   |-- extraction_store.py         <- RAG local des extractions du contribuable
 |   |-- fiscal_profile.py           <- Profil fiscal JSON (source de verite)
 |   |-- rag.py                      <- RAG fiscal (regles, cases, bareme)
-|   |-- document_parser.py          <- Parsing multi-format + OCR
+|   |-- sanitizer.py                <- Protection anti-prompt-injection
+|   |-- document_parser.py          <- Parsing multi-format + OCR (fallback)
 |   |-- fiscal_engine.py            <- Moteur de calcul fiscal (bareme IR)
-|   |-- report_generator.py         <- Generation rapport HTML
+|   |-- report_generator.py         <- Generation rapport HTML + PDF
+|   |-- status_page.py              <- Page de status HTML temps reel
+|   |-- reference_page.py           <- Page de reference des 145 cases 2042
 |   '-- session_store.py            <- Memoire persistante des sessions
 |-- frontend/
-|   |-- index.html                  <- Interface de chat
+|   |-- index.html                  <- Interface de chat (layout 2 colonnes)
 |   |-- css/style.css
 |   '-- js/app.js
 |-- data/
@@ -309,7 +372,7 @@ agent-impots/
 |   '-- regles_fiscales.md          <- Regles fiscales detaillees (20 sections)
 |-- sessions/                       <- Donnees des sessions (local, ignore par git)
 |-- documents/                      <- Vos documents (local, ignore par git)
-'-- output/                         <- Rapports generes (local, ignore par git)
+'-- output/                         <- Rapports et markdowns generes (local, ignore par git)
 ```
 
 ## Mise a jour de la base fiscale
@@ -323,10 +386,10 @@ Les connaissances fiscales sont dans `data/`. Pour mettre a jour quand un nouvea
 
 ## Configuration materielle recommandee
 
-| Composant | Minimum | Recommande |
-|-----------|---------|------------|
-| RAM | 12 Go | 16 Go+ |
-| Stockage | 15 Go libres | 20 Go libres |
+| Composant | Minimum (Mistral 7B) | Recommande (Mistral-Nemo 12B) |
+|-----------|---------------------|-------------------------------|
+| RAM | 8 Go | 16 Go+ |
+| Stockage | 10 Go libres | 20 Go libres |
 | CPU | Tout CPU x64 recent | AMD Ryzen / Intel i5+ |
 | GPU | Non requis | Accelere Ollama si compatible |
 
@@ -339,7 +402,9 @@ L'agent tourne integralement sur CPU. Teste sur : GEEKOM A9 Max (AMD Ryzen 9, 28
 - **Zero cloud** : aucune donnee n'est envoyee sur internet
 - **Zero telemetrie** : aucun tracking, aucun analytics
 - **Stockage local** : sessions, extractions et profils dans le dossier `sessions/` (ignore par git)
-- **Documents jamais copies** : les fichiers originaux ne sont pas dupliques, seules les extractions structurees sont conservees
+- **Documents convertis en Markdown** : verifiables par l'utilisateur sur la page `/documents`
+- **Anti-prompt-injection** : sanitizer integre qui detecte et neutralise les tentatives d'injection dans les documents
+- **CODEOWNERS** : toute modification des fichiers sensibles (prompts, securite, donnees fiscales) requiert une review
 - **Open source** : le code est auditable
 
 ## Licence
