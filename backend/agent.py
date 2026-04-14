@@ -178,7 +178,7 @@ class AgentFiscal:
         elif self.state == STATE_PARALLEL:
             responses = await self._handle_parallel_answer(user_message)
         elif self.state == STATE_SYNTHESE:
-            # L'utilisateur vient de voir la synthese, on passe a la validation
+            await self._send_now("Analyse du profil et generation des questions complementaires en cours...")
             responses = await self._step_validation_detect_missing()
         elif self.state == STATE_VALIDATION:
             responses = await self._step_validation_answer(user_message)
@@ -782,6 +782,7 @@ class AgentFiscal:
     async def _step_synthese(self) -> list[dict]:
         """Genere un resume structure du dossier fiscal par grandes categories.
         Ne montre que les categories pertinentes a l'utilisateur."""
+        await self._send_now("Generation de la synthese de votre dossier fiscal...")
         profile_json = self.profile.get_for_llm()
 
         prompt = (
@@ -1055,6 +1056,7 @@ class AgentFiscal:
 
     async def _step_confirmation_synthese(self) -> list[dict]:
         """Genere une synthese finale et demande confirmation avant le calcul."""
+        await self._send_now("Generation de la synthese finale de votre dossier...")
         profile_json = self.profile.get_for_llm()
 
         prompt = (
@@ -1135,6 +1137,7 @@ class AgentFiscal:
 
     async def _step_calcul(self) -> list[dict]:
         """Calcul fiscal base UNIQUEMENT sur le profil JSON + base fiscale."""
+        await self._send_now("Calcul de votre impot en cours... Cela peut prendre 30 secondes a 1 minute.")
         if self.status:
             self.status.set_state("calcul")
             self.status.refresh()
