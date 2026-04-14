@@ -128,6 +128,25 @@ class StatusPage:
                 pending_question = None
         return questions
 
+    def _load_documents(self) -> list[dict]:
+        """Charge les documents depuis le fichier _extractions.json."""
+        path = self.sessions_dir / f"{self.session_id}_extractions.json"
+        if not path.exists():
+            return []
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            docs = []
+            for ext in data.get("extractions", []):
+                docs.append({
+                    "filename": ext.get("doc_id", "?"),
+                    "status": "ok",
+                    "type": ext.get("type_document", ""),
+                    "detail": ext.get("resume", "")[:80],
+                })
+            return docs
+        except (json.JSONDecodeError, OSError):
+            return []
+
     def _render(self) -> str:
         now = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
         title = self.session_name or "Declaration en cours"
@@ -135,29 +154,39 @@ class StatusPage:
         # Charger les donnees fraiches depuis les fichiers de session
         profile = self._load_profile()
         questions = self._load_questions()
+        documents_from_store = self._load_documents()
+
+        # Fusionner : documents en memoire (progression temps reel) + documents du store
+        all_docs = {d["filename"]: d for d in self.documents}
+        for d in documents_from_store:
+            if d["filename"] not in all_docs:
+                all_docs[d["filename"]] = d
+        documents = list(all_docs.values())
 
         state_labels = {
             "initialisation": ("Initialisation", "#95a5a6"),
             "welcome": ("En attente", "#95a5a6"),
             "ingestion": ("Analyse des documents", "#e67e22"),
             "parallel": ("Analyse + questions", "#e67e22"),
+            "synthese": ("Synthese du dossier", "#3498db"),
             "validation": ("Questions complementaires", "#3498db"),
+            "confirmation": ("Confirmation du dossier", "#e67e22"),
             "calcul": ("Calcul fiscal", "#9b59b6"),
             "verification": ("Verification", "#9b59b6"),
             "done": ("Termine", "#27ae60"),
         }
         state_label, state_color = state_labels.get(self.state, (self.state, "#95a5a6"))
 
-        # Documents
+        # Documents (fusion memoire + fichier)
         docs_html = ""
-        docs_ok = sum(1 for d in self.documents if d["status"] == "ok")
-        docs_err = sum(1 for d in self.documents if d["status"] == "error")
-        docs_skip = sum(1 for d in self.documents if d["status"] == "skip")
-        docs_processing = sum(1 for d in self.documents if d["status"] == "processing")
+        docs_ok = sum(1 for d in documents if d["status"] == "ok")
+        docs_err = sum(1 for d in documents if d["status"] == "error")
+        docs_skip = sum(1 for d in documents if d["status"] == "skip")
+        docs_processing = sum(1 for d in documents if d["status"] == "processing")
 
-        if self.documents:
+        if documents:
             docs_html = "<table><thead><tr><th>Fichier</th><th>Statut</th><th>Type</th><th>Detail</th></tr></thead><tbody>"
-            for d in self.documents:
+            for d in documents:
                 icon = {"ok": "&#10003;", "error": "&#10007;", "skip": "&#8631;", "processing": "&#9881;"}.get(d["status"], "?")
                 color = {"ok": "#27ae60", "error": "#e74c3c", "skip": "#95a5a6", "processing": "#e67e22"}.get(d["status"], "#333")
                 docs_html += (
@@ -332,7 +361,7 @@ th {{ background:#f0f4f8; font-weight:600; color:#1e3a5f; }}
 </div>
 
 <div class="section">
-    <h3>Documents ({len(self.documents)})</h3>
+    <h3>Documents ({len(documents)})</h3>
     <div class="stats">
         <span class="stat stat-ok">{docs_ok} extraits</span>
         <span class="stat stat-err">{docs_err} erreurs</span>
