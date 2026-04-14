@@ -15,7 +15,7 @@ if sys.platform == "win32":
 
 import json
 from pathlib import Path
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from contextlib import asynccontextmanager
@@ -69,29 +69,22 @@ async def reference():
 
 @app.get("/documents")
 async def documents_page():
-    """Page de visualisation des documents convertis en markdown."""
+    """Page liste des documents convertis en markdown."""
     from fastapi.responses import HTMLResponse
     from markdown_converter import MarkdownConverter
     from datetime import datetime
     mc = MarkdownConverter(str(OUTPUT_DIR))
     markdowns = mc.get_all_markdowns()
 
-    cards = ""
+    rows = ""
     for md in markdowns:
-        # Lire le contenu complet
-        md_path = OUTPUT_DIR / "markdown" / md["md_filename"]
-        content = md_path.read_text(encoding="utf-8") if md_path.exists() else ""
-        # Echapper le HTML dans le contenu markdown
-        escaped = content.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        cards += f"""
-        <div class="doc-card">
-            <div class="doc-header" onclick="this.parentElement.classList.toggle('open')">
-                <span class="doc-name">{md['source_filename']}</span>
-                <span class="doc-size">{md['size']:,} chars</span>
-                <span class="doc-toggle">&#9660;</span>
-            </div>
-            <div class="doc-content"><pre>{escaped}</pre></div>
-        </div>"""
+        rows += (
+            f'<a class="doc-row" href="/documents/{md["md_filename"]}" target="_blank">'
+            f'<span class="doc-name">{md["source_filename"]}</span>'
+            f'<span class="doc-size">{md["size"]:,} chars</span>'
+            f'<span class="doc-open">Ouvrir</span>'
+            f'</a>'
+        )
 
     html = f"""<!DOCTYPE html>
 <html lang="fr"><head><meta charset="UTF-8">
@@ -110,16 +103,11 @@ body {{ font-family:'Segoe UI',Tahoma,sans-serif; background:#f0f2f5; color:#2c3
 .topbar-meta {{ font-size:12px; opacity:0.7; }}
 .content {{ flex:1; overflow-y:auto; padding:20px; }}
 .info {{ background:white; border-radius:12px; padding:16px; margin-bottom:16px; box-shadow:0 1px 4px rgba(0,0,0,0.06); font-size:14px; color:#555; }}
-.doc-card {{ background:white; border-radius:10px; margin-bottom:8px; box-shadow:0 1px 3px rgba(0,0,0,0.06); overflow:hidden; }}
-.doc-header {{ display:flex; align-items:center; padding:12px 16px; cursor:pointer; gap:12px; transition:background 0.2s; }}
-.doc-header:hover {{ background:#f8f9fa; }}
-.doc-name {{ font-weight:600; flex:1; }}
+.doc-row {{ display:flex; align-items:center; padding:12px 16px; background:white; border-radius:8px; margin-bottom:6px; text-decoration:none; color:#2c3e50; box-shadow:0 1px 3px rgba(0,0,0,0.06); transition:background 0.2s, box-shadow 0.2s; gap:12px; }}
+.doc-row:hover {{ background:#e8f0fe; box-shadow:0 2px 6px rgba(0,0,0,0.1); }}
+.doc-name {{ font-weight:600; flex:1; font-size:14px; }}
 .doc-size {{ font-size:12px; color:#95a5a6; }}
-.doc-toggle {{ font-size:10px; color:#95a5a6; transition:transform 0.2s; }}
-.doc-card.open .doc-toggle {{ transform:rotate(180deg); }}
-.doc-content {{ display:none; border-top:1px solid #e8ecf1; padding:16px; background:#fafbfc; max-height:600px; overflow:auto; }}
-.doc-card.open .doc-content {{ display:block; }}
-pre {{ font-size:13px; line-height:1.6; white-space:pre-wrap; word-wrap:break-word; font-family:'Consolas','Courier New',monospace; }}
+.doc-open {{ font-size:13px; color:#2980b9; font-weight:600; }}
 .empty {{ text-align:center; padding:40px; color:#95a5a6; }}
 @media(max-width:768px) {{ .layout {{ flex-direction:column; }} .sidebar {{ width:100%; flex-direction:row; padding:12px; }} .sidebar img {{ width:50px; }} }}
 </style></head><body>
@@ -132,13 +120,126 @@ pre {{ font-size:13px; line-height:1.6; white-space:pre-wrap; word-wrap:break-wo
 </div>
 <div class="content">
 <div class="info">
-    Chaque document d'entree est converti en Markdown avant d'etre analyse par l'IA.
-    Vous pouvez verifier ici que le contenu a ete correctement extrait.
-    Cliquez sur un document pour voir son contenu.
+    Chaque document est converti en Markdown avant analyse par l'IA.
+    Cliquez sur un document pour le visualiser et le modifier si necessaire.
+    Les modifications seront prises en compte lors de la prochaine analyse.
 </div>
-{"<div class='empty'>Aucun document converti pour l'instant.</div>" if not markdowns else cards}
+{"<div class='empty'>Aucun document converti pour l'instant.</div>" if not markdowns else rows}
 </div></div></div></body></html>"""
     return HTMLResponse(html)
+
+
+@app.get("/documents/{md_filename}")
+async def document_view(md_filename: str):
+    """Page d'edition d'un document markdown individuel."""
+    from fastapi.responses import HTMLResponse
+    md_path = OUTPUT_DIR / "markdown" / md_filename
+    if not md_path.exists():
+        return HTMLResponse("<h1>Document non trouve</h1>", status_code=404)
+
+    content = md_path.read_text(encoding="utf-8")
+    escaped = content.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    html = f"""<!DOCTYPE html>
+<html lang="fr"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{md_filename}</title>
+<style>
+* {{ margin:0; padding:0; box-sizing:border-box; }}
+body {{ font-family:'Segoe UI',Tahoma,sans-serif; background:#f0f2f5; color:#2c3e50; display:flex; flex-direction:column; height:100vh; }}
+.topbar {{ background:linear-gradient(135deg,#1e3a5f,#2980b9); color:white; padding:12px 20px; display:flex; justify-content:space-between; align-items:center; flex-shrink:0; }}
+.topbar h1 {{ font-size:16px; }}
+.topbar-actions {{ display:flex; gap:8px; align-items:center; }}
+.btn {{ padding:8px 16px; border:none; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; }}
+.btn-save {{ background:#27ae60; color:white; }}
+.btn-save:hover {{ background:#219a52; }}
+.btn-save:disabled {{ background:#95a5a6; cursor:not-allowed; }}
+.btn-reset {{ background:rgba(255,255,255,0.2); color:white; }}
+.btn-reset:hover {{ background:rgba(255,255,255,0.3); }}
+.status {{ font-size:12px; color:rgba(255,255,255,0.7); }}
+.editor {{ flex:1; padding:16px; overflow:auto; }}
+textarea {{
+    width:100%; height:100%; border:1px solid #ddd; border-radius:8px;
+    padding:16px; font-family:'Consolas','Courier New',monospace;
+    font-size:13px; line-height:1.6; resize:none; outline:none;
+    background:white;
+}}
+textarea:focus {{ border-color:#2980b9; }}
+</style></head><body>
+<div class="topbar">
+    <h1>{md_filename}</h1>
+    <div class="topbar-actions">
+        <span class="status" id="status"></span>
+        <button class="btn btn-reset" onclick="resetContent()">Reinitialiser</button>
+        <button class="btn btn-save" id="save-btn" onclick="saveContent()" disabled>Sauvegarder</button>
+    </div>
+</div>
+<div class="editor">
+    <textarea id="content" spellcheck="false">{escaped}</textarea>
+</div>
+<script>
+const original = document.getElementById('content').value;
+const textarea = document.getElementById('content');
+const saveBtn = document.getElementById('save-btn');
+const status = document.getElementById('status');
+
+textarea.addEventListener('input', () => {{
+    const changed = textarea.value !== original;
+    saveBtn.disabled = !changed;
+    status.textContent = changed ? 'Modifications non sauvegardees' : '';
+}});
+
+function resetContent() {{
+    if (confirm('Reinitialiser le contenu original ?')) {{
+        textarea.value = original;
+        saveBtn.disabled = true;
+        status.textContent = 'Reinitialise';
+    }}
+}}
+
+async function saveContent() {{
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Sauvegarde...';
+    status.textContent = '';
+    try {{
+        const response = await fetch('/documents/{md_filename}', {{
+            method: 'PUT',
+            headers: {{ 'Content-Type': 'text/plain' }},
+            body: textarea.value
+        }});
+        const result = await response.json();
+        if (result.status === 'saved') {{
+            status.textContent = 'Sauvegarde OK - sera pris en compte a la prochaine analyse';
+            status.style.color = '#2ecc71';
+        }} else {{
+            status.textContent = 'Erreur de sauvegarde';
+            status.style.color = '#e74c3c';
+        }}
+    }} catch(e) {{
+        status.textContent = 'Erreur : ' + e.message;
+        status.style.color = '#e74c3c';
+    }}
+    saveBtn.textContent = 'Sauvegarder';
+    saveBtn.disabled = true;
+}}
+</script>
+</body></html>"""
+    return HTMLResponse(html)
+
+
+@app.put("/documents/{md_filename}")
+async def document_save(md_filename: str, request: Request):
+    """Sauvegarde les modifications d'un document markdown."""
+    from fastapi.responses import JSONResponse
+    md_path = OUTPUT_DIR / "markdown" / md_filename
+    if not md_path.exists():
+        return JSONResponse({"status": "error", "message": "Fichier non trouve"}, status_code=404)
+
+    body = await request.body()
+    content = body.decode("utf-8")
+    md_path.write_text(content, encoding="utf-8")
+    print(f"[MD] Document modifie par l'utilisateur : {md_filename} ({len(content)} chars)")
+    return JSONResponse({"status": "saved", "size": len(content)})
 
 
 # ---- API Sessions ----
