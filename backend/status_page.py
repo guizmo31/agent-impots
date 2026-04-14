@@ -151,15 +151,21 @@ class StatusPage:
         now = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
         page_title = "Ma declaration fiscale en direct"
 
-        # Charger le nom de session depuis le fichier
+        # Charger les infos de session depuis le fichier
         session_file = self.sessions_dir / f"{self.session_id}.json"
-        if not self.session_name and session_file.exists():
+        session_data = {}
+        if session_file.exists():
             try:
-                sdata = json.loads(session_file.read_text(encoding="utf-8"))
-                self.session_name = sdata.get("name", "")
+                session_data = json.loads(session_file.read_text(encoding="utf-8"))
+                if not self.session_name:
+                    self.session_name = session_data.get("name", "")
             except (json.JSONDecodeError, OSError):
                 pass
         subtitle = self.session_name or ""
+
+        # Calculer la completion
+        from session_store import _compute_completion
+        docs_path = session_data.get("documents_path", "")
 
         # Charger les donnees fraiches depuis les fichiers de session
         profile = self._load_profile()
@@ -179,6 +185,11 @@ class StatusPage:
                 all_docs[fname] = d
             # Sinon : le store a le bon status ("ok"), on le garde
         documents = list(all_docs.values())
+
+        # Calcul de la completion
+        docs_extracted = len(documents_from_store)
+        completion = _compute_completion(self.state, session_data, docs_extracted, docs_path)
+        ring_color = "#2ecc71" if completion >= 100 else "#f39c12" if completion >= 50 else "#3498db"
 
         state_labels = {
             "initialisation": ("Initialisation", "#95a5a6"),
@@ -202,7 +213,7 @@ class StatusPage:
         docs_processing = sum(1 for d in documents if d["status"] == "processing")
 
         if documents:
-            docs_html = "<table><thead><tr><th>Fichier</th><th>Statut</th><th>Type</th><th>Detail</th><th>Markdown</th></tr></thead><tbody>"
+            docs_html = '<table><colgroup><col class="col-fichier"><col class="col-statut"><col class="col-type"><col class="col-detail"><col class="col-md"></colgroup><thead><tr><th>Fichier</th><th>Statut</th><th>Type</th><th>Detail</th><th>Markdown</th></tr></thead><tbody>'
             for d in documents:
                 icon = {"ok": "&#10003;", "error": "&#10007;", "skip": "&#8631;", "processing": "&#9881;"}.get(d["status"], "?")
                 color = {"ok": "#27ae60", "error": "#e74c3c", "skip": "#95a5a6", "processing": "#e67e22"}.get(d["status"], "#333")
@@ -347,9 +358,14 @@ body {{ font-family:'Segoe UI',Tahoma,sans-serif; background:#f0f2f5; color:#2c3
 .stat-err {{ background:#fdecea; color:#e74c3c; }}
 .stat-skip {{ background:#f0f0f0; color:#95a5a6; }}
 .stat-proc {{ background:#fef5e7; color:#e67e22; }}
-table {{ width:100%; border-collapse:collapse; font-size:13px; }}
-th,td {{ padding:8px 10px; text-align:left; border-bottom:1px solid #e8ecf1; }}
+table {{ width:100%; border-collapse:collapse; font-size:13px; table-layout:fixed; }}
+th,td {{ padding:8px 10px; text-align:left; border-bottom:1px solid #e8ecf1; vertical-align:top; overflow-wrap:break-word; word-break:break-word; }}
 th {{ background:#f0f4f8; font-weight:600; color:#1e3a5f; }}
+col.col-fichier {{ width:30%; }}
+col.col-statut {{ width:8%; }}
+col.col-type {{ width:15%; }}
+col.col-detail {{ width:35%; }}
+col.col-md {{ width:12%; }}
 .case-num {{ font-weight:bold; color:#2980b9; font-size:15px; }}
 .montant {{ font-weight:bold; color:#27ae60; white-space:nowrap; }}
 .profile-grid {{ display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:12px; }}
@@ -365,6 +381,11 @@ th {{ background:#f0f4f8; font-weight:600; color:#1e3a5f; }}
 .btn-pdf {{ background:#c0392b; }}
 .btn-html {{ background:#2980b9; }}
 .report-links {{ margin-top:16px; }}
+.completion {{ display:flex; align-items:center; gap:6px; }}
+.completion-ring {{ width:40px; height:40px; transform:rotate(-90deg); }}
+.completion-ring-bg {{ fill:none; stroke:rgba(255,255,255,0.2); stroke-width:3; }}
+.completion-ring-fill {{ fill:none; stroke:{ring_color}; stroke-width:3; stroke-linecap:round; }}
+.completion-pct {{ font-size:18px; font-weight:700; color:white; }}
 .footer {{ text-align:center; color:#95a5a6; font-size:12px; margin-top:20px; }}
 </style>
 </head>
@@ -378,7 +399,14 @@ th {{ background:#f0f4f8; font-weight:600; color:#1e3a5f; }}
         <h1>{page_title}</h1>
         <div>{subtitle} <span class="state-badge">{state_label}</span></div>
     </div>
-    <div class="meta">Mis a jour : {now}<br>Rechargez la page pour actualiser</div>
+    <div class="completion">
+        <svg class="completion-ring" viewBox="0 0 36 36">
+            <path class="completion-ring-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+            <path class="completion-ring-fill" stroke-dasharray="{completion}, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+        </svg>
+        <span class="completion-pct">{completion}%</span>
+    </div>
+    <div class="meta">Mis a jour : {now}</div>
 </div>
 
 <div class="section">
