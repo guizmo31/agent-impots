@@ -186,9 +186,12 @@ class StatusPage:
             # Sinon : le store a le bon status ("ok"), on le garde
         documents = list(all_docs.values())
 
+        # Utiliser le state du fichier (plus fiable que self.state en memoire)
+        current_state = session_data.get("state", self.state)
+
         # Calcul de la completion
         docs_extracted = len(documents_from_store)
-        completion = _compute_completion(self.state, session_data, docs_extracted, docs_path)
+        completion = _compute_completion(current_state, session_data, docs_extracted, docs_path)
         ring_color = "#2ecc71" if completion >= 100 else "#f39c12" if completion >= 50 else "#3498db"
 
         state_labels = {
@@ -203,7 +206,7 @@ class StatusPage:
             "verification": ("Verification", "#9b59b6"),
             "done": ("Termine", "#27ae60"),
         }
-        state_label, state_color = state_labels.get(self.state, (self.state, "#95a5a6"))
+        state_label, state_color = state_labels.get(current_state, (current_state, "#95a5a6"))
 
         # Documents (fusion memoire + fichier)
         docs_html = ""
