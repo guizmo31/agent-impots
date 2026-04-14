@@ -490,11 +490,20 @@ function escapeHtml(text) {
 }
 
 function renderMarkdown(text) {
+    // Extraire les boutons d'action AVANT l'echappement HTML
+    const buttons = [];
+    text = text.replace(/\{\{ACTION_BUTTON:(.+?)\}\}/g, (match, label) => {
+        const placeholder = `__ACTION_BTN_${buttons.length}__`;
+        buttons.push(label);
+        return placeholder;
+    });
+
     let html = escapeHtml(text);
 
-    // Boutons d'action {{ACTION_BUTTON:texte}}
-    html = html.replace(/\{\{ACTION_BUTTON:(.+?)\}\}/g, (match, label) => {
-        return `<button class="action-btn" onclick="sendActionOk(this)">${label}</button>`;
+    // Reinjecter les boutons
+    buttons.forEach((label, i) => {
+        html = html.replace(`__ACTION_BTN_${i}__`,
+            `<button class="action-btn" onclick="sendActionOk(this)">${escapeHtml(label)}</button>`);
     });
 
     html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
