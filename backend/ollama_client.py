@@ -53,6 +53,11 @@ async def query_llm(
     """Envoie une requête au LLM via Ollama."""
     model = await _detect_best_model()
 
+    # Adapter num_ctx a la taille reelle du prompt (evite d'allouer trop de RAM)
+    prompt_len = len(prompt) + len(system_prompt)
+    estimated_tokens = prompt_len // 3  # ~3 chars par token
+    num_ctx = min(max(estimated_tokens + max_tokens + 512, 4096), 32768)
+
     payload = {
         "model": model,
         "prompt": prompt,
@@ -61,8 +66,9 @@ async def query_llm(
         "options": {
             "temperature": temperature,
             "num_predict": max_tokens,
-            "num_ctx": 16384,  # Fenêtre de contexte élargie
+            "num_ctx": num_ctx,
         },
+        "keep_alive": "30m",  # Garder le modele en RAM 30 min (evite rechargement)
     }
 
     async with httpx.AsyncClient(timeout=600.0) as client:

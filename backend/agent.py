@@ -837,17 +837,19 @@ class AgentFiscal:
     # ==================================================================
 
     async def _step_validation_detect_missing(self) -> list[dict]:
-        """Analyse le profil et identifie ce qui manque pour le calcul."""
+        """Analyse le profil et identifie ce qui manque pour le calcul.
+        Prompt LEGER : pas de base fiscale, juste le profil."""
         profile_json = self.profile.get_for_llm()
-        fiscal_ref = get_cases_summary()
 
-        # Construire la liste de ce qui est DEJA connu pour eviter les questions redondantes
+        # Construire la liste de ce qui est DEJA connu
         already_known = []
         foyer = self.profile.data.get("foyer", {}) if self.profile else {}
         if foyer.get("situation"):
             already_known.append(f"situation familiale: {foyer['situation']}")
         if foyer.get("nb_enfants_mineurs", 0) > 0:
-            already_known.append(f"enfants a charge: {foyer['nb_enfants_mineurs']}")
+            already_known.append(f"enfants mineurs: {foyer['nb_enfants_mineurs']}")
+        if foyer.get("nb_enfants_majeurs_rattaches", 0) > 0:
+            already_known.append(f"enfants majeurs rattaches: {foyer['nb_enfants_majeurs_rattaches']}")
         for note in (self.profile.data.get("notes", []) if self.profile else []):
             if isinstance(note, str) and len(note) < 100:
                 already_known.append(note)
@@ -855,7 +857,6 @@ class AgentFiscal:
         known_text = "\n".join(f"- {k}" for k in already_known) if already_known else "(rien)"
 
         prompt = (
-            f"## Referentiel fiscal\n{fiscal_ref}\n\n"
             f"## Profil fiscal actuel du contribuable\n```json\n{profile_json}\n```\n\n"
             f"## Informations DEJA CONNUES (ne PAS redemander)\n{known_text}\n\n"
             "## Mission\n\n"
