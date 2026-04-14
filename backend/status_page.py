@@ -185,14 +185,19 @@ class StatusPage:
         docs_processing = sum(1 for d in documents if d["status"] == "processing")
 
         if documents:
-            docs_html = "<table><thead><tr><th>Fichier</th><th>Statut</th><th>Type</th><th>Detail</th></tr></thead><tbody>"
+            docs_html = "<table><thead><tr><th>Fichier</th><th>Statut</th><th>Type</th><th>Detail</th><th>Markdown</th></tr></thead><tbody>"
             for d in documents:
                 icon = {"ok": "&#10003;", "error": "&#10007;", "skip": "&#8631;", "processing": "&#9881;"}.get(d["status"], "?")
                 color = {"ok": "#27ae60", "error": "#e74c3c", "skip": "#95a5a6", "processing": "#e67e22"}.get(d["status"], "#333")
+                # Lien vers le markdown editable
+                fname = d["filename"]
+                md_name = Path(fname).stem + ".md"
+                md_link = f'<a href="/documents/{md_name}" target="_blank" style="color:#2980b9;font-weight:600">Editer</a>' if d["status"] == "ok" else ""
                 docs_html += (
-                    f'<tr><td>{d["filename"]}</td>'
+                    f'<tr><td>{fname}</td>'
                     f'<td style="color:{color};font-weight:bold">{icon} {d["status"]}</td>'
-                    f'<td>{d["type"]}</td><td>{d["detail"][:80]}</td></tr>'
+                    f'<td>{d["type"]}</td><td>{d["detail"][:60]}</td>'
+                    f'<td>{md_link}</td></tr>'
                 )
             docs_html += "</tbody></table>"
 
