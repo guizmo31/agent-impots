@@ -157,6 +157,7 @@ body {{ font-family:'Segoe UI',Tahoma,sans-serif; background:#f0f2f5; color:#2c3
 .btn-reset {{ background:rgba(255,255,255,0.2); color:white; }}
 .btn-reset:hover {{ background:rgba(255,255,255,0.3); }}
 .status {{ font-size:12px; color:rgba(255,255,255,0.7); }}
+.editor-info {{ padding:10px 16px; background:#fff8e1; border-bottom:1px solid #ffe082; font-size:13px; color:#6d4c00; line-height:1.5; flex-shrink:0; }}
 .editor {{ flex:1; padding:16px; overflow:auto; }}
 textarea {{
     width:100%; height:100%; border:1px solid #ddd; border-radius:8px;
@@ -173,6 +174,12 @@ textarea:focus {{ border-color:#2980b9; }}
         <button class="btn btn-reset" onclick="resetContent()">Reinitialiser</button>
         <button class="btn btn-save" id="save-btn" onclick="saveContent()" disabled>Sauvegarder</button>
     </div>
+</div>
+<div class="editor-info">
+    Ce fichier a ete genere automatiquement par l'extraction du document original.
+    Il est <strong>editable</strong> : corrigez les erreurs d'extraction (montants mal lus, texte tronque),
+    supprimez le texte inutile, ou ajoutez des informations necessaires au calcul de l'impot.
+    Vos modifications seront prises en compte par l'agent IA lors de la prochaine analyse.
 </div>
 <div class="editor">
     <textarea id="content" spellcheck="false">{escaped}</textarea>
