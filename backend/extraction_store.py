@@ -113,43 +113,51 @@ class ExtractionStore:
     # ------------------------------------------------------------------
 
     def build_profile_data(self) -> dict:
-        """Construit les donnees du profil fiscal a partir des extractions."""
+        """Construit les donnees du profil fiscal a partir des extractions.
+        Matching souple sur les types (lowercase, mots-cles)."""
         profile = {"revenus": {}, "charges_deductibles": {}, "notes": []}
 
         for ext in self.extractions:
-            doc_type = ext.get("type_document", "")
+            doc_type = ext.get("type_document", "").lower().replace(" ", "_").replace("'", "_")
             montants = ext.get("montants", {})
             entite = ext.get("entite", {})
             doc_id = ext.get("doc_id", "")
 
-            if doc_type == "fiche_de_paie":
+            # --- Matching souple par mots-cles dans le type ---
+
+            if any(w in doc_type for w in ("paie", "salaire", "bulletin")):
+                net_imp = montants.get("net_imposable", montants.get("net_a_declarer",
+                         montants.get("cumul_net_imposable", montants.get("net_fiscal", 0))))
                 profile.setdefault("revenus", {}).setdefault("salaires", []).append({
                     "declarant": 1,
                     "source": entite.get("nom", "Employeur"),
-                    "net_imposable": montants.get("net_imposable", 0),
-                    "pas_retenu": montants.get("pas_retenu", montants.get("prelevement_source", 0)),
+                    "net_imposable": net_imp,
+                    "salaire_brut": montants.get("salaire_brut", montants.get("brut", 0)),
+                    "pas_retenu": montants.get("pas_retenu", montants.get("prelevement_source",
+                                  montants.get("prelevement_a_la_source", 0))),
                     "heures_sup_exo": montants.get("heures_sup_exonerees", 0),
                     "doc_source": doc_id,
                 })
 
-            elif doc_type == "taxe_fonciere":
+            elif any(w in doc_type for w in ("taxe_fonciere", "taxes_foncieres", "foncier")):
                 profile.setdefault("revenus", {}).setdefault("foncier_nu", []).append({
                     "bien": entite.get("nom", montants.get("adresse_bien", "Bien immobilier")),
                     "taxe_fonciere_montant": montants.get("taxe_fonciere", montants.get("montant_total", 0)),
                     "doc_source": doc_id,
                 })
 
-            elif doc_type == "pret_immobilier":
+            elif any(w in doc_type for w in ("pret", "emprunt", "credit", "interets")):
                 profile.setdefault("charges_deductibles", {}).setdefault("autres", []).append({
                     "type": "interets_emprunt",
                     "bien": entite.get("nom", "Bien immobilier"),
-                    "capital_restant": montants.get("capital_restant_du", 0),
+                    "capital_restant": montants.get("capital_restant_du", montants.get("capital_restant", 0)),
                     "interets_annuels": montants.get("interets_annuels", montants.get("interets", 0)),
+                    "assurance_annuelle": montants.get("assurance_annuelle", 0),
                     "taux": montants.get("taux", 0),
                     "doc_source": doc_id,
                 })
 
-            elif doc_type in ("avis_imposition", "declaration_2042"):
+            elif any(w in doc_type for w in ("imposition", "2042", "declaration")):
                 if montants.get("nb_parts"):
                     profile.setdefault("foyer", {})["nb_parts"] = montants["nb_parts"]
                 if montants.get("revenu_fiscal_reference"):
@@ -157,17 +165,25 @@ class ExtractionStore:
                         f"RFR N-1 : {montants['revenu_fiscal_reference']} EUR (source: {doc_id})"
                     )
 
-            elif doc_type in ("releve_titres", "ifu_titres"):
+            elif any(w in doc_type for w in ("ifu", "titre", "fiscal", "portefeuille", "compte_titre")):
                 cm = profile.setdefault("revenus", {}).setdefault("capitaux_mobiliers", {})
                 cm["dividendes"] = cm.get("dividendes", 0) + montants.get("dividendes", 0)
                 cm["interets"] = cm.get("interets", 0) + montants.get("interets", 0)
                 cm["pfu_deja_preleve"] = cm.get("pfu_deja_preleve", 0) + montants.get("pfu_preleve", 0)
+                # RSU / gains d'acquisition
+                if montants.get("gains_acquisition") or montants.get("rsu"):
+                    profile.setdefault("revenus", {}).setdefault("rsu_stock_options", []).append({
+                        "type": "rsu",
+                        "employeur": entite.get("nom", "?"),
+                        "gain_acquisition": montants.get("gains_acquisition", montants.get("rsu", 0)),
+                        "doc_source": doc_id,
+                    })
                 cm.setdefault("sources", []).append({
                     "type": "ifu", "source": entite.get("nom", "Courtier"),
                     "montant": montants.get("dividendes", 0) + montants.get("interets", 0),
                 })
 
-            elif doc_type in ("scpi_ifu", "scpi_releve"):
+            elif any(w in doc_type for w in ("scpi",)):
                 profile.setdefault("revenus", {}).setdefault("societe", []).append({
                     "type": "SCPI", "nom": entite.get("nom", "SCPI"), "regime_fiscal": "IR",
                     "revenus_fonciers_quote_part": montants.get("revenus_fonciers", 0),
@@ -175,7 +191,7 @@ class ExtractionStore:
                     "doc_source": doc_id,
                 })
 
-            elif doc_type in ("sci_bilan", "sci_releve"):
+            elif any(w in doc_type for w in ("sci",)):
                 profile.setdefault("revenus", {}).setdefault("societe", []).append({
                     "type": "SCI", "nom": entite.get("nom", "SCI"),
                     "regime_fiscal": montants.get("regime_fiscal", "IR"),
@@ -183,12 +199,34 @@ class ExtractionStore:
                     "dividendes": montants.get("dividendes", 0), "doc_source": doc_id,
                 })
 
-            elif doc_type in ("bail", "quittance_loyer"):
+            elif any(w in doc_type for w in ("bail", "quittance", "loyer")):
+                loyer_mensuel = montants.get("loyer", montants.get("loyer_mensuel", 0))
+                loyer_annuel = montants.get("loyer_annuel", loyer_mensuel * 12 if loyer_mensuel else 0)
                 profile.setdefault("revenus", {}).setdefault("foncier_nu", []).append({
                     "bien": entite.get("nom", montants.get("adresse", "Bien loue")),
-                    "loyers_bruts": montants.get("loyer_annuel", montants.get("loyer_mensuel", 0) * 12),
+                    "loyers_bruts": loyer_annuel,
+                    "loyer_mensuel": loyer_mensuel,
                     "doc_source": doc_id,
                 })
+
+            elif any(w in doc_type for w in ("habitation", "taxe_habitation")):
+                profile.setdefault("notes", []).append(
+                    f"Taxe habitation : {montants.get('montant_total', montants.get('somme_a_prelever', '?'))} EUR ({doc_id})"
+                )
+
+            elif any(w in doc_type for w in ("assurance", "attestation")):
+                # Assurances : pas directement fiscales mais utiles comme info
+                if montants:
+                    profile.setdefault("notes", []).append(
+                        f"Assurance ({entite.get('nom', '?')}): {', '.join(f'{k}={v}' for k,v in montants.items() if v)} ({doc_id})"
+                    )
+
+            else:
+                # Type non reconnu : stocker dans les notes avec les montants
+                if montants:
+                    profile.setdefault("notes", []).append(
+                        f"[{doc_type}] {entite.get('nom', '')} : {', '.join(f'{k}={v}' for k,v in montants.items() if v)} ({doc_id})"
+                    )
 
             for m in ext.get("donnees_manquantes", []):
                 note = f"[{doc_id}] Donnee manquante : {m}"
