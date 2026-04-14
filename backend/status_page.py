@@ -166,11 +166,18 @@ class StatusPage:
         questions = self._load_questions()
         documents_from_store = self._load_documents()
 
-        # Fusionner : documents en memoire (progression temps reel) + documents du store
-        all_docs = {d["filename"]: d for d in self.documents}
-        for d in documents_from_store:
-            if d["filename"] not in all_docs:
-                all_docs[d["filename"]] = d
+        # Fusionner : le store fait autorite (status "ok" definitif),
+        # la memoire ne sert que pour les docs en cours ("processing")
+        all_docs = {d["filename"]: d for d in documents_from_store}
+        for d in self.documents:
+            fname = d["filename"]
+            if fname not in all_docs:
+                # Document pas dans le store : progression temps reel
+                all_docs[fname] = d
+            elif d["status"] == "processing":
+                # En cours de traitement : garder le status temps reel
+                all_docs[fname] = d
+            # Sinon : le store a le bon status ("ok"), on le garde
         documents = list(all_docs.values())
 
         state_labels = {
