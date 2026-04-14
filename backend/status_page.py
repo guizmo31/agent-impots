@@ -149,7 +149,17 @@ class StatusPage:
 
     def _render(self) -> str:
         now = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-        title = self.session_name or "Declaration en cours"
+        page_title = "Ma declaration fiscale en direct"
+
+        # Charger le nom de session depuis le fichier
+        session_file = self.sessions_dir / f"{self.session_id}.json"
+        if not self.session_name and session_file.exists():
+            try:
+                sdata = json.loads(session_file.read_text(encoding="utf-8"))
+                self.session_name = sdata.get("name", "")
+            except (json.JSONDecodeError, OSError):
+                pass
+        subtitle = self.session_name or ""
 
         # Charger les donnees fraiches depuis les fichiers de session
         profile = self._load_profile()
@@ -309,7 +319,7 @@ class StatusPage:
 <head>
 <meta charset="UTF-8">
 <meta http-equiv="refresh" content="10">
-<title>Status - {title}</title>
+<title>{page_title}</title>
 <style>
 * {{ margin:0; padding:0; box-sizing:border-box; }}
 body {{ font-family:'Segoe UI',Tahoma,sans-serif; background:#f0f2f5; color:#2c3e50; }}
@@ -359,8 +369,8 @@ th {{ background:#f0f4f8; font-weight:600; color:#1e3a5f; }}
 <div class="container">
 <div class="header">
     <div>
-        <h1>{title}</h1>
-        <span class="state-badge">{state_label}</span>
+        <h1>{page_title}</h1>
+        <div>{subtitle} <span class="state-badge">{state_label}</span></div>
     </div>
     <div class="meta">Mis a jour : {now}<br>Rafraichissement auto toutes les 10s</div>
 </div>
