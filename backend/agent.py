@@ -38,8 +38,10 @@ SYSTEM_PROMPT = (
 # Etats du pipeline
 STATE_WELCOME = "welcome"
 STATE_INGESTION = "ingestion"
-STATE_PARALLEL = "parallel"  # Questions structurantes + ingestion en parallele
-STATE_VALIDATION = "validation"
+STATE_PARALLEL = "parallel"       # Questions structurantes + ingestion en parallele
+STATE_SYNTHESE = "synthese"       # Resume de comprehension du dossier par categories
+STATE_VALIDATION = "validation"   # Questions complementaires sur les points a eclaircir
+STATE_CONFIRMATION = "confirmation"  # Boucle : synthese finale -> approbation ou corrections
 STATE_CALCUL = "calcul"
 STATE_VERIFICATION = "verification"
 STATE_DONE = "done"
@@ -175,8 +177,13 @@ class AgentFiscal:
             responses = await self._resume_ingestion()
         elif self.state == STATE_PARALLEL:
             responses = await self._handle_parallel_answer(user_message)
+        elif self.state == STATE_SYNTHESE:
+            # L'utilisateur vient de voir la synthese, on passe a la validation
+            responses = await self._step_validation_detect_missing()
         elif self.state == STATE_VALIDATION:
             responses = await self._step_validation_answer(user_message)
+        elif self.state == STATE_CONFIRMATION:
+            responses = await self._handle_confirmation(user_message)
         elif self.state == STATE_CALCUL:
             responses = await self._step_calcul()
         elif self.state == STATE_VERIFICATION:
@@ -500,12 +507,12 @@ class AgentFiscal:
                 msg += f"- {key} : {val:,.2f} EUR\n"
             msg += "\n"
 
-        # Passer a la validation (questions complementaires basees sur le profil complet)
-        self.state = STATE_VALIDATION
+        # Passer a la synthese
+        self.state = STATE_SYNTHESE
         self._persist()
 
-        validation_responses = await self._step_validation_detect_missing()
-        return [self._msg(msg)] + validation_responses
+        synthese_responses = await self._step_synthese()
+        return [self._msg(msg)] + synthese_responses
 
     async def _resume_ingestion(self) -> list[dict]:
         """Reprend une ingestion interrompue (crash, kill, fermeture navigateur)."""
@@ -563,14 +570,20 @@ class AgentFiscal:
             q_pct = q_done / q_total if q_total > 0 else 0
             return int(ingestion_pct * 35 + q_pct * 15)
 
+        if self.state == STATE_SYNTHESE:
+            return 55
+
         if self.state == STATE_VALIDATION:
             q_total = len(self.pending_questions)
             q_done = self.current_question_index
             q_pct = q_done / q_total if q_total > 0 else 1.0
-            return 50 + int(q_pct * 25)
+            return 55 + int(q_pct * 20)
+
+        if self.state == STATE_CONFIRMATION:
+            return 80
 
         if self.state == STATE_CALCUL:
-            return 85
+            return 90
         if self.state == STATE_VERIFICATION:
             return 95
 
@@ -756,14 +769,70 @@ class AgentFiscal:
                 msg += f"- {key} : {val:,.2f} EUR\n"
             msg += "\n"
 
+        self.state = STATE_SYNTHESE
+        self._persist()
+
+        synthese_responses = await self._step_synthese()
+        return [self._msg(msg)] + synthese_responses
+
+    # ==================================================================
+    # Etape 1b : SYNTHESE -- resume de comprehension du dossier
+    # ==================================================================
+
+    async def _step_synthese(self) -> list[dict]:
+        """Genere un resume structure du dossier fiscal par grandes categories.
+        Ne montre que les categories pertinentes a l'utilisateur."""
+        profile_json = self.profile.get_for_llm()
+
+        prompt = (
+            "## Profil fiscal du contribuable\n"
+            f"```json\n{profile_json}\n```\n\n"
+            "## Mission\n\n"
+            "IMPORTANT : Reponds UNIQUEMENT en francais.\n\n"
+            "Fais une synthese claire et structuree de ta comprehension du dossier fiscal "
+            "de ce contribuable. Organise par grandes categories :\n\n"
+            "1. **Situation familiale** : situation, nombre de parts, enfants\n"
+            "2. **Revenus salaries** : employeur, salaire net imposable annuel, prelevement a la source\n"
+            "3. **Immobilier** : pour CHAQUE bien, indique l'adresse, le type "
+            "(residence principale / secondaire / locatif nu bail 3 ans / locatif meuble LMNP / saisonnier), "
+            "les revenus locatifs et les charges associees\n"
+            "4. **Placements financiers** : RSU (employeur, montant), PEA, compte-titres, "
+            "dividendes, interets, plus-values\n"
+            "5. **Societes** : si le contribuable est gerant/dirigeant, type de societe, "
+            "remuneration, dividendes\n"
+            "6. **Charges deductibles** : dons, emploi a domicile, PER, pensions alimentaires\n"
+            "7. **Points a eclaircir** : liste les informations manquantes ou ambigues\n\n"
+            "REGLES :\n"
+            "- N'inclus QUE les categories pour lesquelles tu as des informations\n"
+            "- Si le contribuable n'a pas de societe, ne mentionne pas cette categorie\n"
+            "- Sois precis sur les montants\n"
+            "- Pour l'immobilier, identifie chaque bien separement\n"
+            "- Termine par les points a eclaircir\n\n"
+            "Reponds en texte structure (pas en JSON)."
+        )
+
+        response = await query_llm(prompt, SYSTEM_PROMPT, temperature=0.2, max_tokens=3000)
+
+        # Passer a validation pour les points a eclaircir
         self.state = STATE_VALIDATION
         self._persist()
 
-        validation_responses = await self._step_validation_detect_missing()
-        return [self._msg(msg)] + validation_responses
+        if self.status:
+            self.status.set_state("synthese")
+            self.status.refresh()
+
+        return [
+            self._msg(
+                "## Synthese de votre dossier fiscal\n\n"
+                f"{response}\n\n"
+                "---\n\n"
+                "Je vais maintenant vous poser quelques questions pour eclaircir les points manquants."
+            ),
+            *(await self._step_validation_detect_missing()),
+        ]
 
     # ==================================================================
-    # Étape 2 : VALIDATION — détecter les manques et poser des questions
+    # Etape 2 : VALIDATION -- detecter les manques et poser des questions
     # ==================================================================
 
     async def _step_validation_detect_missing(self) -> list[dict]:
@@ -819,14 +888,8 @@ class AgentFiscal:
         self._persist()
 
         if not self.pending_questions:
-            # Profil complet -> passer au calcul
-            self.state = STATE_CALCUL
-            self._persist()
-            return [
-                self._msg("Votre profil fiscal semble complet. Lancement du calcul..."),
-                {"type": "status", "content": "Calcul fiscal en cours...", "state": STATE_CALCUL},
-                *(await self._step_calcul()),
-            ]
+            # Profil complet -> passer a la confirmation
+            return await self._step_confirmation_synthese()
 
         total = len(self.pending_questions)
         return [self._msg(
@@ -856,15 +919,8 @@ class AgentFiscal:
             idx = self.current_question_index
             return [self._msg(f"**Question {idx + 1}/{total}** :\n{self.pending_questions[idx]}")]
 
-        # Toutes les questions répondues -> calcul
-        self.state = STATE_CALCUL
-        self._persist()
-
-        return [
-            self._msg("Merci ! Votre profil fiscal est maintenant complet.\n\nLancement du calcul..."),
-            {"type": "status", "content": "Calcul fiscal en cours...", "state": STATE_CALCUL},
-            *(await self._step_calcul()),
-        ]
+        # Toutes les questions repondues -> confirmation
+        return await self._step_confirmation_synthese()
 
     async def _structure_answer(self, question: str, answer: str) -> dict | None:
         """Transforme une reponse en donnees structurees. Pattern matching LOCAL d'abord, LLM en fallback."""
@@ -994,11 +1050,90 @@ class AgentFiscal:
         return None
 
     # ==================================================================
-    # Étape 3 : CALCUL — RAG + profil JSON -> cases 2042
+    # Etape 2b : CONFIRMATION -- synthese finale + approbation
+    # ==================================================================
+
+    async def _step_confirmation_synthese(self) -> list[dict]:
+        """Genere une synthese finale et demande confirmation avant le calcul."""
+        profile_json = self.profile.get_for_llm()
+
+        prompt = (
+            "## Profil fiscal du contribuable\n"
+            f"```json\n{profile_json}\n```\n\n"
+            "## Mission\n\n"
+            "IMPORTANT : Reponds UNIQUEMENT en francais.\n\n"
+            "Fais une synthese FINALE et COMPLETE de ta comprehension du dossier fiscal.\n"
+            "Organise par categories pertinentes (ignore les categories vides) :\n\n"
+            "- Situation familiale et parts fiscales\n"
+            "- Revenus salaries (employeur, net imposable annuel)\n"
+            "- Immobilier : chaque bien avec adresse, type, revenus/charges\n"
+            "- Placements : RSU, PEA, dividendes, plus-values\n"
+            "- Societes (si applicable)\n"
+            "- Charges deductibles\n\n"
+            "Sois precis sur les montants. C'est la derniere verification avant le calcul."
+        )
+
+        response = await query_llm(prompt, SYSTEM_PROMPT, temperature=0.2, max_tokens=3000)
+
+        self.state = STATE_CONFIRMATION
+        self._persist()
+
+        if self.status:
+            self.status.set_state("confirmation")
+            self.status.refresh()
+
+        return [self._msg(
+            "## Synthese finale de votre dossier\n\n"
+            f"{response}\n\n"
+            "---\n\n"
+            "**Est-ce que cette synthese est correcte ?**\n\n"
+            "- Si **oui** : tapez **ok** ou **c'est bon** pour lancer le calcul de l'impot\n"
+            "- Si **non** : indiquez les corrections ou precisions a apporter "
+            "(ex: *'le loyer de l'appartement de Toulouse est de 650 EUR/mois, pas 600'* "
+            "ou *'j'ai aussi un PER avec 3000 EUR verses'*)"
+        )]
+
+    async def _handle_confirmation(self, user_message: str) -> list[dict]:
+        """Gere la boucle de confirmation : approbation ou corrections."""
+        msg = user_message.lower().strip()
+
+        # L'utilisateur approuve -> lancer le calcul
+        if any(w in msg for w in ("ok", "oui", "c'est bon", "c est bon", "correct", "valide",
+                                   "lance", "calcul", "go", "parfait", "approuve", "rien a ajouter",
+                                   "pas de correction", "tout est bon")):
+            self.state = STATE_CALCUL
+            self._persist()
+
+            if self.status:
+                self.status.set_state("calcul")
+
+            return [
+                self._msg("Dossier approuve. Lancement du calcul de l'impot..."),
+                {"type": "status", "content": "Calcul fiscal en cours...", "state": STATE_CALCUL},
+                *(await self._step_calcul()),
+            ]
+
+        # L'utilisateur apporte des corrections -> integrer et re-synthetiser
+        print(f"[CONFIRM] Correction recue : {user_message[:100]}")
+
+        # Structurer la correction dans le profil
+        extraction = await self._structure_answer("Correction du contribuable", user_message)
+        if extraction:
+            self.profile.merge_user_answers(extraction)
+            self.profile.save()
+
+        if self.status:
+            self.status.refresh()
+
+        # Re-generer la synthese avec les corrections integrees
+        return await self._step_confirmation_synthese()
+
+    # ==================================================================
+    # Etape 3 : CALCUL -- base fiscale + profil JSON -> cases 2042
     # ==================================================================
 
     async def _step_calcul(self) -> list[dict]:
-        """Calcul fiscal base UNIQUEMENT sur le profil JSON + RAG."""
+        """Calcul fiscal base UNIQUEMENT sur le profil JSON + base fiscale."""
         if self.status:
             self.status.set_state("calcul")
             self.status.refresh()
@@ -1184,8 +1319,14 @@ class AgentFiscal:
             if self.current_question_index < len(self.pending_questions):
                 msg += f"**Question {q_done + 1}/{q_total}** :\n{self.pending_questions[q_done]}"
 
+        elif self.state == STATE_SYNTHESE:
+            msg += "L'analyse est terminee. Tapez **ok** pour voir la synthese du dossier."
+
+        elif self.state == STATE_CONFIRMATION:
+            msg += "La synthese de votre dossier est prete.\n\n"
+            msg += "Tapez **ok** pour lancer le calcul, ou indiquez vos corrections."
+
         elif self.state == STATE_CALCUL:
-            msg += f"{already_extracted} document(s) analyses. Completude : {completeness:.0%}\n\n"
             msg += "Profil complet. Tapez **ok** pour lancer le calcul."
 
         elif self.state == STATE_DONE:
