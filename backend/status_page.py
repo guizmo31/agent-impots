@@ -325,7 +325,6 @@ class StatusPage:
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="refresh" content="10">
 <title>{page_title}</title>
 <style>
 * {{ margin:0; padding:0; box-sizing:border-box; }}
@@ -379,7 +378,7 @@ th {{ background:#f0f4f8; font-weight:600; color:#1e3a5f; }}
         <h1>{page_title}</h1>
         <div>{subtitle} <span class="state-badge">{state_label}</span></div>
     </div>
-    <div class="meta">Mis a jour : {now}<br>Rafraichissement auto toutes les 10s</div>
+    <div class="meta">Mis a jour : {now}<br>Rechargez la page pour actualiser</div>
 </div>
 
 <div class="section">

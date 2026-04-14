@@ -90,7 +90,6 @@ async def documents_page():
 <html lang="fr"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Documents convertis en Markdown</title>
-<meta http-equiv="refresh" content="10">
 <style>
 * {{ margin:0; padding:0; box-sizing:border-box; }}
 body {{ font-family:'Segoe UI',Tahoma,sans-serif; background:#f0f2f5; color:#2c3e50; }}
@@ -116,7 +115,7 @@ body {{ font-family:'Segoe UI',Tahoma,sans-serif; background:#f0f2f5; color:#2c3
 <div class="main-col">
 <div class="topbar">
     <h1>Documents convertis ({len(markdowns)} fichiers)</h1>
-    <div class="topbar-meta">Mis a jour : {datetime.now().strftime('%d/%m/%Y %H:%M:%S')} - Rafraichissement auto toutes les 10s</div>
+    <div class="topbar-meta">Mis a jour : {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}</div>
 </div>
 <div class="content">
 <div class="info">
