@@ -375,6 +375,17 @@ function removeTypingIndicator() {
 
 // --- Input ---
 
+function sendActionOk(btn) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    btn.disabled = true;
+    btn.textContent = 'En cours...';
+    addUserMessage('ok');
+    ws.send(JSON.stringify({ message: 'ok' }));
+    isWaiting = true;
+    disableInput();
+    addTypingIndicator();
+}
+
 function sendMessage() {
     const text = userInput.value.trim();
     if (!text || isWaiting || !ws || ws.readyState !== WebSocket.OPEN) return;
@@ -480,6 +491,12 @@ function escapeHtml(text) {
 
 function renderMarkdown(text) {
     let html = escapeHtml(text);
+
+    // Boutons d'action {{ACTION_BUTTON:texte}}
+    html = html.replace(/\{\{ACTION_BUTTON:(.+?)\}\}/g, (match, label) => {
+        return `<button class="action-btn" onclick="sendActionOk(this)">${label}</button>`;
+    });
+
     html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
     html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
     html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');

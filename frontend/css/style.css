@@ -545,6 +545,29 @@ textarea:disabled {
     background: #c0392b;
 }
 
+.action-btn {
+    display: inline-block;
+    padding: 10px 20px;
+    background: #27ae60;
+    color: white;
+    border: none;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 8px;
+    transition: background 0.2s;
+}
+
+.action-btn:hover {
+    background: #219a52;
+}
+
+.action-btn:disabled {
+    background: #95a5a6;
+    cursor: not-allowed;
+}
+
 .disclaimer {
     text-align: center;
     font-size: 12px;

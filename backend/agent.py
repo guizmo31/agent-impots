@@ -1087,10 +1087,11 @@ class AgentFiscal:
             f"{response}\n\n"
             "---\n\n"
             "**Est-ce que cette synthese est correcte ?**\n\n"
-            "- Si **oui** : tapez **ok** ou **c'est bon** pour lancer le calcul de l'impot\n"
-            "- Si **non** : indiquez les corrections ou precisions a apporter "
-            "(ex: *'le loyer de l'appartement de Toulouse est de 650 EUR/mois, pas 600'* "
-            "ou *'j'ai aussi un PER avec 3000 EUR verses'*)"
+            "Si tout est bon, cliquez sur le bouton ci-dessous. "
+            "Sinon, indiquez vos corrections dans le chat "
+            "(ex: *'le loyer de Toulouse est de 650 EUR/mois, pas 600'* "
+            "ou *'j'ai aussi un PER avec 3000 EUR verses'*).\n\n"
+            "{{ACTION_BUTTON:Tout est correct, lancer le calcul}}"
         )]
 
     async def _handle_confirmation(self, user_message: str) -> list[dict]:
@@ -1297,7 +1298,7 @@ class AgentFiscal:
         if self.state == STATE_INGESTION:
             remaining = self._count_remaining_docs()
             msg += f"{already_extracted} document(s) deja analyse(s), **{remaining} restant(s)**.\n\n"
-            msg += "Tapez **ok** pour reprendre l'analyse et lancer le calcul."
+            msg += "{{ACTION_BUTTON:Reprendre l'analyse en cours}}"
 
         elif self.state == STATE_PARALLEL:
             q_done = self.current_question_index
@@ -1309,7 +1310,7 @@ class AgentFiscal:
             if q_done < q_total:
                 msg += f"\n**Question {q_done + 1}/{q_total}** :\n{self.pending_questions[q_done]}"
             else:
-                msg += "Tapez **ok** pour continuer."
+                msg += "{{ACTION_BUTTON:Continuer}}"
 
         elif self.state == STATE_VALIDATION:
             msg += f"{already_extracted} document(s) analyses. Completude : {completeness:.0%}\n"
@@ -1320,14 +1321,14 @@ class AgentFiscal:
                 msg += f"**Question {q_done + 1}/{q_total}** :\n{self.pending_questions[q_done]}"
 
         elif self.state == STATE_SYNTHESE:
-            msg += "L'analyse est terminee. Tapez **ok** pour voir la synthese du dossier."
+            msg += "{{ACTION_BUTTON:Voir la synthese du dossier}}"
 
         elif self.state == STATE_CONFIRMATION:
             msg += "La synthese de votre dossier est prete.\n\n"
-            msg += "Tapez **ok** pour lancer le calcul, ou indiquez vos corrections."
+            msg += "{{ACTION_BUTTON:Lancer le calcul}}\n\nOu indiquez vos corrections ci-dessous."
 
         elif self.state == STATE_CALCUL:
-            msg += "Profil complet. Tapez **ok** pour lancer le calcul."
+            msg += "{{ACTION_BUTTON:Lancer le calcul}}"
 
         elif self.state == STATE_DONE:
             msg += "Le rapport a deja ete genere. Consultez `output/`."
