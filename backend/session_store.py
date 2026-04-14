@@ -215,16 +215,26 @@ def _compute_completion(state: str, data: dict, docs_extracted: int, docs_path: 
             return int(ingestion_pct * 35 + q_pct * 15)
         return int(ingestion_pct * 50)
 
-    # Phase 2 : Validation/Questions (50-75%)
+    # Phase 2 : Synthese (55%)
+    if state == "synthese":
+        return 55
+
+    # Phase 3 : Validation/Questions (55-75%)
     if state == "validation":
         q_total = len(data.get("pending_questions", []))
         q_done = data.get("current_question_index", 0)
         q_pct = q_done / q_total if q_total > 0 else 1.0
-        return 50 + int(q_pct * 25)
+        return 55 + int(q_pct * 20)
 
-    # Phase 3 : Calcul (75-95%)
-    if state in ("calcul", "verification"):
-        return 85 if state == "calcul" else 95
+    # Phase 4 : Confirmation (80%)
+    if state == "confirmation":
+        return 80
+
+    # Phase 5 : Calcul (90-95%)
+    if state == "calcul":
+        return 90
+    if state == "verification":
+        return 95
 
     return 0
 
